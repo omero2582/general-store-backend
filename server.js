@@ -1,5 +1,6 @@
 import express from 'express';
 import * as dotenv from 'dotenv'
+import cors from 'cors'
 dotenv.config();
 
 import indexRouter from './routes/index.js'
@@ -14,11 +15,11 @@ const app = express();
 // // need __dirname manually, since it is only available in CommonJS, and we changed to ES6 modules
 // const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // app.use(express.static(baseUrlFrontend  || path.join(__dirname, '../frontend/build')));
-
+// app.use(cors())
 app.use(express.json());
 
 // other routers, then
-app.use('/', indexRouter);
+app.use('/api', indexRouter);
 
 app.use(errorHandler);
 
