@@ -6,7 +6,14 @@ const ProductSchema = new Schema({
   name: { type: String, required: true },
   description: { type: String },
   price: { type: Number },  // in cents
-  image: { type: String },
+  image: { 
+    type: {
+      publicId: { type: String, required: true },
+      url: { type: String, required: true },
+      _id: false,
+    },
+    required: true
+  },
 
   // TODO calculated anytime a rating is added, edited, or removed
   averageRating: { type: Number, default: 0 },

@@ -2,7 +2,9 @@ import express from 'express';
 import asyncHandler from 'express-async-handler';
 import Product from '../models/Product.js';
 import '../config/cloudinary.js'
+import '../config/database.js'
 import {v2 as cloudinary} from 'cloudinary'
+import { CloudinaryError, CustomError } from '../errors/errors.js';
 // const multer = require('multer');
 
 const router = express.Router();
@@ -22,10 +24,13 @@ router.get('/products/generate-presigned-url', async (req, res) => {
     const options = {
       timestamp: Math.round(new Date().getTime() / 1000),
       asset_folder: 'products',
-      tags: 'unlinked',
       allowed_formats: ['jpg', 'png', 'webp', 'jfif'],
       use_filename: true,
+      context: 'linked=false|test=true'
+      // to add more context, separate them with pipe, for ex: 'linked=false|abc=true'
+      // not sure how else to add multiple contexts . Object doesnt work
     }
+    // tags: 'unlinked',
     // eager: 'c_pad,h_300,w_400|c_crop,h_200,w_260',
     // access_mode: can be public or authenticated. defaults to public
     // access_control
@@ -64,55 +69,54 @@ router.get('/products/generate-presigned-url', async (req, res) => {
 
 //https://cloudinary.com/documentation/update_assets
 //https://cloudinary.com/documentation/image_upload_api_reference#explicit
-// currently just using uploader.remove_tag. This doesnt return the image values,
-// so alternatively we can use uploader.explicit. The only problem is this doesnt
-// let you remove 1 specific tag. It only lets you overrride ALL tags.
-// It does however let you change context. So maybe I can switch to using
-// something like 'linked: false' in context, and just toggling that
 router.post('/products',
   asyncHandler(async (req, res) => {
     const {name, description, price, imageId} = req.body;
-    const out = await cloudinary.uploader.remove_tag('unlinked', [imageId]);
+    // const out = await cloudinary.uploader.remove_tag('unlinked', [imageId]);
     // above just returns an array  like: "public_ids": ["omero_vs_yassuo_old_icon_NAMES_CLOSER_1_vpntlt"]
-    if(out.public_ids.length === 0){
-      throw new Error('image not found')
+    // if(out.public_ids.length === 0){
+    //   throw new Error('image not found')
+    // }
+    let cloudinaryResponse;
+    try {
+      cloudinaryResponse = await cloudinary.uploader.explicit(imageId, {
+        type:'upload',
+        context: 'linked=true'  
+        // this deletes all other context besides this, right now we dont have any
+      })
+    } catch (err) {
+      throw new CloudinaryError(err);
     }
+    // I think at the end of the day though, its better to do it like rn where
+    // we use context instead of tags, because maybe in the future I want to
+    // allow tags input, and then it would be problematic to keep them here
+    // I would be forced to use uploader.remove_tag, then api.resource (2 calls),
+    // Or i would have to trust the client to send in the approporate tags
 
-    // TODO TODO. Just realized we cant do it this way and need slight change..
-    // We need to store the image URL below, but we are only acceptin imageId (cloudinary public Id)
-    // We cant accept 2 body poarams imageID and imageURL, because then when we
-    // save the document, we'd be trusting that the imageURL corresponds to the imageID....
-    // So instead, we should either swithc to accepting a imageURL and extracting the publicID from it,
-    // or we can switch to using uploader.explicit and switching to using adding a context
-    // linked=false instead.
-    // I think just switch to above, because I can just foresee problems with url input inconsitencies
-    // for example they send in wrongUrl/correctPublicId.jpg, and I'd be extracting and
-    // finding the image at correctPublicId, but then storing the wrongUrl in database
     try {
       const product = new Product({
         name,
         description,
         price,
-        imageId,
+        image: {
+          url: cloudinaryResponse.secure_url,
+          publicId: cloudinaryResponse.public_id,
+        },
       });
       await product.save();
+      res.json({messsage:`success`, product})
     } catch (error) {
       const out = await cloudinary.uploader.destroy(imageId);
-      return res.status(500).json({out, message: 'Error saving to DB. deleted file?'})
-      // Error saving to DB. Shouldnt be validation error since fields passed validation
-      // maybe delete the image in cloudinary and say DB error?
-      // Or dont delete. If we don't delete then we'd have to give the user
-      // some sort of image folder that they can alternatively use
-      // The problem is that now by design, we would be allowing ghost files
-      // on purpose... its just that we would be displaying them to the user...
-      // so maybe its not bad ???
+      // out.result can be "ok" || "not found", maybe more
+      throw new CustomError('Could not store product details into database', {imageDeletedStatus: {...out}});
+      // Wont be a validation error since fields passed validation
+      // In the future maybe don't delete nor give context of linked to any image
+      // Instead give the user an image viewer. Then by design, we would be
+      // allowing ghost files on purpose but displaying them to the user...
+      // not sure, maybe its better but this is in long long future bc image
+      // viewer would me complicated to implement
     }
-
-    // res.json({messsage:`success`, product})
   })
 )
-// not sure if this should have some sort of way of veryfying that it comes
-// from a rewues that was just signed? I guess access the url first, and then 
-// check that it comes from my cloud name and that it was generated in the last 24 hours??
 
 export default router;
