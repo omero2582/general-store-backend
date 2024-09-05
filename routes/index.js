@@ -4,7 +4,7 @@ import Product from '../models/Product.js';
 import '../config/cloudinary.js'
 import '../config/database.js'
 import {v2 as cloudinary} from 'cloudinary'
-import { CloudinaryError, CustomError } from '../errors/errors.js';
+import { CloudinaryError, CustomError, NotFoundError } from '../errors/errors.js';
 import { z } from "zod";
 import { validateFieldsZod } from '../middleware/validationMiddleware.js';
 
@@ -13,23 +13,19 @@ import { validateFieldsZod } from '../middleware/validationMiddleware.js';
 //https://cloudinary.com/documentation/advanced_url_delivery_options#custom_favicons
 const router = express.Router();
 
-router.get('/',
-  // authOptional,
-  asyncHandler(async (req, res) => {
-    res.json({messsage:`success`})
-  })
-)
+
 
 const productSchema = z.object({
   name: z.string({ required_error: "Name is required" }).min(1, "Name is required"),
   imageId: z.string({ required_error: "imageID is required" }).min(1, "imageID is required"),
   description: z.string().optional(),
   price: z.number().int().optional(),
+  visibility: z.enum(['public', 'private']).optional(),
 });
 
 // options for upload:
 //https://cloudinary.com/documentation/image_upload_api_reference#upload_optional_parameters
-router.get('/products/generate-presigned-url',
+router.get('/admin/products/upload-presigned',
   validateFieldsZod(productSchema.omit({imageId: true})),
   asyncHandler(async (req, res) => {
     try {
@@ -74,8 +70,7 @@ router.get('/products/generate-presigned-url',
         }
       });
     } catch (err) {
-      console.log(err);
-      res.status(500).json({ error: 'Failed to generate pre-signed URL' });
+      throw new CustomError('Failed to generate pre-signed URL');
     }
   })
 );
@@ -87,10 +82,10 @@ router.get('/products/generate-presigned-url',
 
 //https://cloudinary.com/documentation/update_assets
 //https://cloudinary.com/documentation/image_upload_api_reference#explicit
-router.post('/products',
+router.post('/admin/products',
   validateFieldsZod(productSchema),
   asyncHandler(async (req, res) => {
-    const {name, description, price, imageId} = req.body;
+    const {name, description, price, imageId, visibility} = req.body;
     // const out = await cloudinary.uploader.remove_tag('unlinked', [imageId]);
     // above just returns an array  like: "public_ids": ["omero_vs_yassuo_old_icon_NAMES_CLOSER_1_vpntlt"]
     // if(out.public_ids.length === 0){
@@ -121,6 +116,7 @@ router.post('/products',
           url: cloudinaryResponse.secure_url,
           publicId: cloudinaryResponse.public_id,
         },
+        visibility,
       });
       await product.save();
       res.json({messsage:`success`, product})
@@ -135,6 +131,32 @@ router.post('/products',
       // not sure, maybe its better but this is in long long future bc image
       // viewer would me complicated to implement
     }
+  })
+)
+
+router.get('/admin/products',
+  asyncHandler(async (req, res) => {
+    const products = await Product.find();
+    return res.json({products});
+  })
+)
+
+// public routes
+router.get('/products',
+  asyncHandler(async (req, res) => {
+    const products = await Product.find({visibility: 'public'});
+    // if (!products.length) {
+    //   throw new NotFoundError('No products found');
+    // }
+    // prob just return empty array if no products
+    return res.json({products});
+  })
+)
+
+router.get('/',
+  // authOptional,
+  asyncHandler(async (req, res) => {
+    res.json({messsage:`success`})
   })
 )
 

@@ -1,12 +1,12 @@
-// TODO TODO change our 'type' to just 'name'
+// TODO recently changed from 'type' to 'name'
 // A lot of apis return name it seems. Change this is our message board too
 export class CustomError extends Error {
-  constructor(message, {statusCode = 500, type = "InternalServerError", ...object} = {}){
+  constructor(message, {statusCode = 500, name = "InternalServerError", ...object} = {}){
     super(message);
     Object.assign(this, object);
     this.statusCode = statusCode;
-    this.type = type;
-    // this.name = name;
+    this.name = name;
+    // this.type = type;
     // this.isOperational = true; Not sure if should add this,
     // basically marks it as a 'known caught error'
     // to differentiate it from an unknown thrown error that
@@ -25,9 +25,8 @@ export class CloudinaryError extends CustomError {
     //   "http_code": 404
     // }
     super(message, {
-      // name,
       ...rest,
-      type: name,
+      name,
       statusCode: http_code || 500,
     });
   }
@@ -39,7 +38,7 @@ export class AuthenticationError extends CustomError {
     super(message, {
       ...object,
       statusCode: 401,
-      type: "AuthenticationError",
+      name: "AuthenticationError",
     });
   }
 }
@@ -49,7 +48,7 @@ export class AuthorizationError extends CustomError {
     super(message, {
       ...object,
       statusCode: 403,
-      type: "AuthorizationError",
+      name: "AuthorizationError",
     });
   }
 }
@@ -59,7 +58,7 @@ export class ValidationError extends CustomError {
     super(message, {
       ...object,
       statusCode: 400,
-      type: "ValidationError",
+      name: "ValidationError",
     });
   }
 }
@@ -79,7 +78,7 @@ export class DuplicateMongoError extends CustomError {
           msg,
         },
       },
-      type: "DuplicateError",
+      name: "DuplicateError",
       statusCode: 400
       // name: mongoErr.name,
     });
@@ -94,7 +93,7 @@ export class NotFoundError extends CustomError {
     super(message, {
       ...object,
       statusCode: 404,
-      type: "NotFoundError"
+      name: "NotFoundError"
     });
   }
 }
@@ -104,7 +103,7 @@ export class TransactionError extends CustomError {
     super(message, {
       ...object,
       statusCode: 500,
-      type: "TransactionError"
+      name: "TransactionError"
     });
   }
 }
