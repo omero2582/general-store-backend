@@ -5,7 +5,7 @@ import '../config/database.js'
 import { z } from "zod";
 import { validateFieldsZod } from '../middleware/validationMiddleware.js';
 import { addProduct, deleteProduct, editProduct, getPresignedUrl, getProducts } from '../controllers/productsController.js';
-import { productSchema } from '../../shared/schemas/schemas.js';
+import { productSchema } from '../../general-store-shared/schemas/schemas.js';
 
 // const multer = require('multer');
 // TODO custom icon on tab that serves files:
