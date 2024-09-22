@@ -2,6 +2,10 @@ import asyncHandler from 'express-async-handler';
 import Product from '../models/Product.js';
 import {v2 as cloudinary} from 'cloudinary'
 import { CloudinaryError, CustomError, NotFoundError } from '../errors/errors.js';
+// TODO
+// IMPORTANT. when using 'cloudinary.api' methods, we are using the admin api,
+// which has rate limit of 500 calls per hour on free tier. 2000 per hour for paid acc
+
 
 // options for upload:
 //https://cloudinary.com/documentation/image_upload_api_reference#upload_optional_parameters
@@ -54,6 +58,9 @@ export const getPresignedUrl = asyncHandler(async (req, res) => {
 
 //https://cloudinary.com/documentation/update_assets
 //https://cloudinary.com/documentation/image_upload_api_reference#explicit
+// TODO after changing DB schema from image to images, this still works correctly,
+// but now change this to actually support uplaoding multiple images.
+// Will have to change whole process of upolading
 export const addProduct = asyncHandler(async (req, res) => {
   const {name, description, price, imageId, visibility} = req.body;
   // const out = await cloudinary.uploader.remove_tag('unlinked', [imageId]);
@@ -82,10 +89,10 @@ export const addProduct = asyncHandler(async (req, res) => {
       name,
       description,
       price,
-      image: {
+      images: [{
         url: cloudinaryResponse.secure_url,
         publicId: cloudinaryResponse.public_id,
-      },
+      }],
       visibility,
     });
     await product.save();
@@ -126,12 +133,12 @@ export const deleteProduct = asyncHandler(async (req, res) => {
     throw new NotFoundError('Product not found');
   }
 
-  // delete image
-  const imageId = product.image.publicId;
-  const imageDeleteResult = await cloudinary.uploader.destroy(imageId);
-
-  if(imageDeleteResult?.result!== 'ok'){
-    throw new CustomError('Product Image could not be deleted. Product was not deleted')
+  // delete all images
+  const imagesIds = product.images.map(p => p.publicId);
+  const imageDeleteResult = await cloudinary.api.delete_resources(imagesIds);
+  const hasDeletedAtLeastOne =  Object.values(imageDeleteResult.deleted).some(value => value === 'deleted');
+  if(!hasDeletedAtLeastOne){
+    throw new CustomError('No Product Images could be deleted. Product was not deleted', {error: imageDeleteResult})
   }
 
   // now delete document
@@ -140,10 +147,19 @@ export const deleteProduct = asyncHandler(async (req, res) => {
     throw new NotFoundError('Document not found when deleting. Image alone has been deleted');
   }
 
-  return res.json({message: `success`, id, imageId})
+  return res.json({message: `success`, result: imageDeleteResult})
 });
 
-
+// TODO now fix after changeng DB schema from image to images
+// What im thinking is, the frontend would allow you to be in 'Edit Mode'
+// for a post, and remove/add whichever images. Then when you click on 'Save'
+// it would start the porcess:
+// 1- Get a presigned URL to upload any new images
+// 2- Use the presign URL in the frontend to upload the new images
+// 3- Backend recieves an array of 'imagesIds'. It retrives the prduct, and
+// diffs the new imagesIds vs the existing imagesIds, to find which images to delete.
+// 4- Backend starts a transaction where it sets the new imagesIds, then it deletes
+// the images that need to be deleted from cloudinary
 export const editProduct = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const {name, description, price, imageId, visibility} = req.body;

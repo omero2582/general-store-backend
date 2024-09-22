@@ -33,13 +33,19 @@ const ProductSchema = new Schema({
       return Number((value / 100).toFixed(2));
     }
    },
-  image: { 
-    type: {
+  images: { 
+    type: [{
       publicId: { type: String, required: true },
       url: { type: String, required: true },
       _id: false,
-    },
-    required: true
+    }],
+    required: true,
+    validate: {
+      validator: function(arr) {
+        return arr.length > 0;
+      },
+      message: 'Images array must contain at least one image.'
+    }
   },
   visibility : { type: String, enum: ['public', 'private'], default: 'public' },
 
