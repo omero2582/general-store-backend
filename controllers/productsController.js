@@ -1,7 +1,8 @@
 import asyncHandler from 'express-async-handler';
 import Product from '../models/Product.js';
 import {v2 as cloudinary} from 'cloudinary'
-import { CloudinaryError, CustomError, NotFoundError } from '../errors/errors.js';
+import { CloudinaryError, CustomError, NotFoundError, TransactionError } from '../errors/errors.js';
+import mongoose from 'mongoose';
 // TODO
 // IMPORTANT. when using 'cloudinary.api' methods, we are using the admin api,
 // which has rate limit of 500 calls per hour on free tier. 2000 per hour for paid acc
@@ -62,12 +63,13 @@ export const getPresignedUrl = asyncHandler(async (req, res) => {
 // but now change this to actually support uplaoding multiple images.
 // Will have to change whole process of upolading
 export const addProduct = asyncHandler(async (req, res) => {
-  const {name, description, price, imageId, visibility} = req.body;
+  const {name, description, price, images, visibility} = req.body;
   // const out = await cloudinary.uploader.remove_tag('unlinked', [imageId]);
   // above just returns an array  like: "public_ids": ["omero_vs_yassuo_old_icon_NAMES_CLOSER_1_vpntlt"]
   // if(out.public_ids.length === 0){
   //   throw new Error('image not found')
   // }
+  const {imageId, order} = images[0];
   let cloudinaryResponse;
   try {
     cloudinaryResponse = await cloudinary.uploader.explicit(imageId, {
@@ -92,6 +94,7 @@ export const addProduct = asyncHandler(async (req, res) => {
       images: [{
         url: cloudinaryResponse.secure_url,
         publicId: cloudinaryResponse.public_id,
+        order
       }],
       visibility,
     });
@@ -125,29 +128,40 @@ export const getProducts = asyncHandler(async (req, res) => {
   return res.json({products});
 })
 
+
 export const deleteProduct = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  // Transaction so that if image deletion fails, then document rolls back to not deleted
+  // If our delete order was instead image deletion first, then we would
+  // end up with no images but existing document
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      // delete document
+      const product = await Product.findOneAndDelete({_id: id}).session(session);
+      if(!product){
+        throw new NotFoundError('Product not found');
+      }
 
-  const product = await Product.findById(id);
-  if(!product){
-    throw new NotFoundError('Product not found');
+      // delete all images
+      const imagesIds = product.images.map(p => p.publicId);
+      const imageDeleteResult = await cloudinary.api.delete_resources(imagesIds);
+      const hasDeletedAtLeastOne =  Object.values(imageDeleteResult.deleted).some(value => value === 'deleted');
+      if(!hasDeletedAtLeastOne){
+        throw new CustomError('No Product Images could be deleted. Product was not deleted', {error: imageDeleteResult})
+      }
+
+      return res.json({message: `success`, result: imageDeleteResult})
+    });
+  } catch (error) {
+    const {message, errors, stack} = error;
+    if(error instanceof CustomError){
+      throw error;
+    }
+    throw new TransactionError(message);
+  } finally {
+    session.endSession();
   }
-
-  // delete all images
-  const imagesIds = product.images.map(p => p.publicId);
-  const imageDeleteResult = await cloudinary.api.delete_resources(imagesIds);
-  const hasDeletedAtLeastOne =  Object.values(imageDeleteResult.deleted).some(value => value === 'deleted');
-  if(!hasDeletedAtLeastOne){
-    throw new CustomError('No Product Images could be deleted. Product was not deleted', {error: imageDeleteResult})
-  }
-
-  // now delete document
-  const { deletedCount } = await product.deleteOne();
-  if(deletedCount === 0){
-    throw new NotFoundError('Document not found when deleting. Image alone has been deleted');
-  }
-
-  return res.json({message: `success`, result: imageDeleteResult})
 });
 
 // TODO now fix after changeng DB schema from image to images

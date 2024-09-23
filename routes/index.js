@@ -13,7 +13,7 @@ import { productSchema } from '../../general-store-shared/schemas/schemas.js';
 const router = express.Router();
 
 router.post('/products/upload-presigned',
-  validateFieldsZod(productSchema.omit({imageId: true})),
+  validateFieldsZod(productSchema.omit({images: true})),
   getPresignedUrl,
 );
 

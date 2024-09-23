@@ -37,6 +37,7 @@ const ProductSchema = new Schema({
     type: [{
       publicId: { type: String, required: true },
       url: { type: String, required: true },
+      order: { type: Number, required: true},
       _id: false,
     }],
     required: true,
