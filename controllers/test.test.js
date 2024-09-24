@@ -67,3 +67,43 @@ const _convertDBImageToImages = async () => {
   console.log('DONE')
 }
 
+const newPromise = () => {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => resolve(1), 1000);
+  });
+}
+
+const newPromiseReject = () => {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => reject({key: "errr"}), 1000);
+  });
+}
+
+const sandbox = async () => {
+  console.time('promises');
+  const arr =  new Array(10).fill(newPromise()); 
+  const allPromise = await Promise.all(arr); 
+  console.timeEnd('promises')
+  console.log(allPromise); 
+}
+
+const sandboxSuccessReject = async () => {
+  const arr = [newPromise(), newPromiseReject(), newPromiseReject(), newPromise()];
+  const allResponses = await Promise.allSettled(arr);
+
+  // Separate successful and failed responses
+  let allResponsesSuccess = [], allResponsesFail = [];
+  allResponses.forEach(response => {
+    if(response.status === 'fulfilled'){
+      allResponsesSuccess.push(response.value);
+    }else{
+      allResponsesFail.push(response.reason)
+    }
+  })
+
+   console.log('success', allResponsesSuccess)
+   console.log('fail', allResponsesFail)
+}
+
+const out = await Promise.allSettled([].map(() => 'r'));
+console.log(out);

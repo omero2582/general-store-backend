@@ -18,7 +18,7 @@ export class CustomError extends Error {
 //
 export class CloudinaryError extends CustomError {
   constructor(cloudinaryErr){
-    const {message, name, http_code, ...rest} = cloudinaryErr;
+    const {message, name = "Error", http_code = 500, ...rest} = cloudinaryErr;
     //  {
     //   "message": "Resource not found - GVGBQTBXIAAS3ax_dkcdap",
     //   "name": "Error",
@@ -27,7 +27,7 @@ export class CloudinaryError extends CustomError {
     super(message, {
       ...rest,
       name,
-      statusCode: http_code || 500,
+      statusCode: http_code,
     });
   }
 }

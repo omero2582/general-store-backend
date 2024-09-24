@@ -3,7 +3,6 @@ import Product from '../models/Product.js';
 import {v2 as cloudinary} from 'cloudinary'
 import { CloudinaryError, CustomError, NotFoundError, TransactionError } from '../errors/errors.js';
 import mongoose from 'mongoose';
-// TODO
 // IMPORTANT. when using 'cloudinary.api' methods, we are using the admin api,
 // which has rate limit of 500 calls per hour on free tier. 2000 per hour for paid acc
 
@@ -59,57 +58,87 @@ export const getPresignedUrl = asyncHandler(async (req, res) => {
 
 //https://cloudinary.com/documentation/update_assets
 //https://cloudinary.com/documentation/image_upload_api_reference#explicit
-// TODO after changing DB schema from image to images, this still works correctly,
-// but now change this to actually support uplaoding multiple images.
-// Will have to change whole process of upolading
 export const addProduct = asyncHandler(async (req, res) => {
-  const {name, description, price, images, visibility} = req.body;
+  const {name, description, price, images, visibility} = req.validatedData;
   // const out = await cloudinary.uploader.remove_tag('unlinked', [imageId]);
   // above just returns an array  like: "public_ids": ["omero_vs_yassuo_old_icon_NAMES_CLOSER_1_vpntlt"]
   // if(out.public_ids.length === 0){
   //   throw new Error('image not found')
   // }
-  const {imageId, order} = images[0];
-  let cloudinaryResponse;
-  try {
-    cloudinaryResponse = await cloudinary.uploader.explicit(imageId, {
-      type:'upload',
-      context: 'linked=true'  
-      // this deletes all other context besides this, right now we dont have any
-    })
-  } catch (err) {
-    throw new CloudinaryError(err);
-  }
-  // I think at the end of the day though, its better to do it like rn where
-  // we use context instead of tags, because maybe in the future I want to
+  // I prefer context instead of tags, like below, because maybe in the future maybe I want to
   // allow tags input, and then it would be problematic to keep them here
   // I would be forced to use uploader.remove_tag, then api.resource (2 calls),
   // Or i would have to trust the client to send in the approporate tags
+    
+  let imagesWithResponses;
+  try {
+    imagesWithResponses = await Promise.allSettled(
+      images.map(async (image) => {
+        let cloudinaryResponse = await cloudinary.uploader.explicit(image.imageId, {
+          type:'upload',
+          context: 'linked=true'  
+          // this deletes all other context besides this, right now we dont have any
+        })
+        return {...image, cloudinaryResponse}
+        // we need the inner async awaits inside the .map above, because we need the result in the object we return
+     })
+    );
+
+    // Separate successful and failed responses
+    let allResponsesSuccess = [];
+    let allResponsesFail = [];
+    imagesWithResponses.forEach(({cloudinaryResponse}) => {
+      if(cloudinaryResponse.status === 'fulfilled'){
+        allResponsesSuccess.push(cloudinaryResponse.value);
+      }else{
+        allResponsesFail.push(cloudinaryResponse.reason)
+      }
+    });
+
+    // If some failed to add tag on explicit(), then take all the successful ones, and revert them to 'linked=false
+    // Since above we set 'linked=true', then we know that the assets DO exist, so if below throws error, its a network problem
+    if(allResponsesFail.length > 0){
+      await Promise.allSettled( // if these result in errors, then network problem
+        allResponsesSuccess.map(({cloudinaryResponse}) => {
+          return cloudinary.uploader.explicit(cloudinaryResponse.public_id, {
+            type:'upload',
+            context: 'linked=false'  
+          })
+        })
+      )
+      // TODO allSettled() above can result in err responses too, not much we can do. We are forced to add a second cron job,
+      // which will look up all the product images in our database, then compare them to our cloudinary images,
+      // and then delete the ones that arent used in any products. Not sure tho bc in the future we might wish
+      // to just show the user all their cloudinary images, and let them handle it. We'd just show them their storage limits
+      throw CustomError('Error setting context tags for image assets', {allResponsesFail})
+    }
+
+  } catch (err) {
+    throw new CloudinaryError(err);
+  }
 
   try {
     const product = new Product({
       name,
       description,
       price,
-      images: [{
+      images: imagesWithResponses.map(({cloudinaryResponse, order, imageId}) => ({
         url: cloudinaryResponse.secure_url,
         publicId: cloudinaryResponse.public_id,
         order
-      }],
+      })),
       visibility,
     });
     await product.save();
     res.json({messsage:`success`, product})
   } catch (error) {
-    const out = await cloudinary.uploader.destroy(imageId);
+    const out = await Promise.all(
+      images.map(({imageId}) =>cloudinary.uploader.destroy(imageId))
+    );
+    throw new CustomError('Could not store product details into database', {imageDeletedStatus: out});
+    // const out = await cloudinary.uploader.destroy(imageId);
+    // throw new CustomError('Could not store product details into database', {imageDeletedStatus: {...out}});
     // out.result can be "ok" || "not found", maybe more
-    throw new CustomError('Could not store product details into database', {imageDeletedStatus: {...out}});
-    // Wont be a validation error since fields passed validation
-    // In the future maybe don't delete nor give context of linked to any image
-    // Instead give the user an image viewer. Then by design, we would be
-    // allowing ghost files on purpose but displaying them to the user...
-    // not sure, maybe its better but this is in long long future bc image
-    // viewer would me complicated to implement
   }
 })
 
@@ -176,7 +205,7 @@ export const deleteProduct = asyncHandler(async (req, res) => {
 // the images that need to be deleted from cloudinary
 export const editProduct = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const {name, description, price, imageId, visibility} = req.body;
+  const {name, description, price, imageId, visibility} = req.validatedData;
   // everything is optional
 
   const product = await Product.findById(id);
