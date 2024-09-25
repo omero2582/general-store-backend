@@ -20,3 +20,4 @@ async function initialize(){
 
 
 await initialize();
+export default mongoose.connection.getClient();

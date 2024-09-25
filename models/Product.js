@@ -33,6 +33,12 @@ const ProductSchema = new Schema({
       return Number((value / 100).toFixed(2));
     }
    },
+  visibility : { type: String, enum: ['public', 'private'], default: 'public' },
+
+  // TODO these 2 will be calculated anytime a rating is added, edited, or removed
+  averageRating: { type: Number, default: 0 },
+  numRatings: { type: Number, default: 0 },
+  //
   images: { 
     type: [{
       publicId: { type: String, required: true },
@@ -48,11 +54,6 @@ const ProductSchema = new Schema({
       message: 'Images array must contain at least one image.'
     }
   },
-  visibility : { type: String, enum: ['public', 'private'], default: 'public' },
-
-  // TODO calculated anytime a rating is added, edited, or removed
-  averageRating: { type: Number, default: 0 },
-  numRatings: { type: Number, default: 0 }
 }, {
   timestamps: true,
   methods : {

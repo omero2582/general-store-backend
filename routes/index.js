@@ -1,7 +1,6 @@
 import express from 'express';
 import asyncHandler from 'express-async-handler';
 import '../config/cloudinary.js'
-import '../config/database.js'
 import { z } from "zod";
 import { validateFieldsZod } from '../middleware/validationMiddleware.js';
 import { addProduct, deleteProduct, editProduct, getPresignedUrl, getProducts } from '../controllers/productsController.js';
