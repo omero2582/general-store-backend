@@ -39,11 +39,4 @@ router.get('/products',
 )
 
 
-router.get('/',
-  // authOptional,
-  asyncHandler(async (req, res) => {
-    res.json({messsage:`success`})
-  })
-)
-
 export default router;

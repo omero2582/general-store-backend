@@ -1,16 +1,21 @@
-import express from 'express';
-import * as dotenv from 'dotenv'
-import cors from 'cors'
-dotenv.config();
+import './config/env.js';
 
-import indexRouter from './routes/index.js'
+import express from 'express';
+import cors from 'cors'
 
 import session from 'express-session';
 import passport from 'passport';
-import './config/google-auth.js';
-import MongoClient from './config/database.js';
-import { errorHandler } from './middleware/errorMiddleware.js';
 import MongoStore from 'connect-mongo';
+
+import MongoClient from './config/database.js';
+import './config/google-auth.js';
+
+import indexRouter from './routes/index.js'
+import authRouter from './routes/auth.js'
+
+import { errorHandler } from './middleware/errorMiddleware.js';
+import { AuthenticationError } from './errors/errors.js';
+import asyncHandler from 'express-async-handler';
 
 const app = express();
 
@@ -33,42 +38,46 @@ app.use(session({
     // mongo store will automatically use the value of maxAge that we set on the cookie as the value for ttl
   })
 }));  //research saveUninitailized and resave, think i need to set them to false if setting expiry maxAge
-app.use(passport.initialize());
+
 app.use(passport.session());
+
+//
+
+// Middleware to override res.json() to always include req.user
+app.use((req, res, next) => {
+  const originalJson = res.json;  // Store the original res.json method
+  
+  res.json = function (body) {    // Override the res.json method
+    if (req.isAuthenticated()) {
+      body.user = req.user;       // Attach req.user to the response body
+      body.auth = true;
+    }
+    originalJson.call(this, body); // Call the original res.json with the modified body
+  };
+  
+  next();
+});
+
+app.get('/api/',
+  asyncHandler(async (req, res) => {
+    res.json({message: 'success'})
+  })
+);
 
 // other routers, then
 app.use('/api', indexRouter);
 
-//
-app.get('/api/auth/google',
-  (req, res, next) => { console.log('AUTHENTICATE'); return next()},
-  passport.authenticate('google', {scope: ['profile', 'email']})
-  // this redirect the user to a large URL that is the google sign-in page
-)
+app.use('/api/auth', authRouter);
 
-app.get('/api/auth/google/redirect',
-  (req, res, next) => { console.log('REDIRECT'); return next()},
-  // this actually athenticates the use and runs the code in the passport strategy
-  passport.authenticate('google', { 
-    failureRedirect: '/login',
-  }),
-  function(req, res) {
-    // Successful authentication, redirect home.
-    console.log('SUCCESS')
-    res.redirect('/');
-  }
-)
-//
-
+// Error Handler (catch-all)
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 3000;
-const hostname = '0.0.0.0';
-
-// app.listen(port, hostname, () => {
-//   console.log(`Server running at http://${hostname}:${port}/`);
-// });
-
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+const hostname = '0.0.0.0';
+// app.listen(port, hostname, () => {
+//   console.log(`Server running at http://${hostname}:${port}/`);
+// });

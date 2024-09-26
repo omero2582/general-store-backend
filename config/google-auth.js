@@ -10,14 +10,13 @@ const opts = {
 };
 passport.use(
 	new Strategy(opts, async (accessToken, refreshToken, profile, done) => {
+    // Step 3 - Google Sign-In Success, now use the google user information
+    // to findOrCreate a new user for our DB
     console.log('PROFIELEEE', profile)
     let user;
     try {
       user = await User.findOne({ 'authProviders.google.id': profile.id });
-    } catch (err) {
-      return done(err, null);
-    }
-    try {
+      
       if (!user) {
         const newUser = new User({
           name: profile.displayName,
@@ -31,8 +30,7 @@ passport.use(
             }
           }
         });
-        const newSavedUser = await newUser.save();
-        return done(null, newSavedUser);
+        user = await newUser.save();
       }
       return done(null, user);
     } catch (err) {
@@ -42,6 +40,7 @@ passport.use(
 );
 
 passport.serializeUser((user, done) => {
+  // step 4 - user our DB's id to store the session
   console.log('SERLIAZIE');
 	done(null, user.id);
 });
