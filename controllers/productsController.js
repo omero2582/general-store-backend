@@ -1,15 +1,35 @@
 import asyncHandler from 'express-async-handler';
 import Product from '../models/Product.js';
 import {v2 as cloudinary} from 'cloudinary'
-import { CloudinaryError, CustomError, NotFoundError, TransactionError } from '../errors/errors.js';
+import { AuthorizationError, CloudinaryError, CustomError, NotFoundError, TransactionError } from '../errors/errors.js';
 import mongoose from 'mongoose';
 // IMPORTANT. when using 'cloudinary.api' methods, we are using the admin api,
 // which has rate limit of 500 calls per hour on free tier. 2000 per hour for paid acc
 
 
+export const getProductsPublic = asyncHandler(async (req, res) => {
+  let products = await Product.find({visibility: 'public'});
+  // if (!products.length) {
+  //   throw new NotFoundError('No products found');
+  // }
+  // prob just return empty array if no products
+  return res.json({products});
+})
+
+export const getProducts = asyncHandler(async (req, res) => {
+  if(!req.user.isUserLevelMoreThanOrEqualTo('admin')){
+    throw new AuthorizationError('User Level of Admin required to access this resource')
+  }
+  let products = await Product.find();
+  return res.json({products});
+})
+
 // options for upload:
 //https://cloudinary.com/documentation/image_upload_api_reference#upload_optional_parameters
 export const getPresignedUrl = asyncHandler(async (req, res) => {
+  if(!req.user.isUserLevelMoreThanOrEqualTo('admin')){
+    throw new AuthorizationError('User Level of Admin required to access this resource')
+  }
   try {
     const options = {
       timestamp: Math.round(new Date().getTime() / 1000),
@@ -59,6 +79,9 @@ export const getPresignedUrl = asyncHandler(async (req, res) => {
 //https://cloudinary.com/documentation/update_assets
 //https://cloudinary.com/documentation/image_upload_api_reference#explicit
 export const addProduct = asyncHandler(async (req, res) => {
+  if(!req.user.isUserLevelMoreThanOrEqualTo('admin')){
+    throw new AuthorizationError('User Level of Admin required to access this resource')
+  }
   const {name, description, price, images, visibility} = req.validatedData;
   // const out = await cloudinary.uploader.remove_tag('unlinked', [imageId]);
   // above just returns an array  like: "public_ids": ["omero_vs_yassuo_old_icon_NAMES_CLOSER_1_vpntlt"]
@@ -142,23 +165,11 @@ export const addProduct = asyncHandler(async (req, res) => {
   }
 })
 
-export const getProducts = asyncHandler(async (req, res) => {
-  const isAdmin = true; // req.user.isAdmin
-  let products;
-  if(isAdmin){
-    products = await Product.find();
-  }else{
-    products = await Product.find({visibility: 'public'});
-  }
-  // if (!products.length) {
-  //   throw new NotFoundError('No products found');
-  // }
-  // prob just return empty array if no products
-  return res.json({products});
-})
-
 
 export const deleteProduct = asyncHandler(async (req, res) => {
+  if(!req.user.isUserLevelMoreThanOrEqualTo('admin')){
+    throw new AuthorizationError('User Level of Admin required to access this resource')
+  }
   const { id } = req.params;
   // Transaction so that if image deletion fails, then document rolls back to not deleted
   // If our delete order was instead image deletion first, then we would
@@ -204,6 +215,9 @@ export const deleteProduct = asyncHandler(async (req, res) => {
 // 4- Backend starts a transaction where it sets the new imagesIds, then it deletes
 // the images that need to be deleted from cloudinary
 export const editProduct = asyncHandler(async (req, res) => {
+  if(!req.user.isUserLevelMoreThanOrEqualTo('admin')){
+    throw new AuthorizationError('User Level of Admin required to access this resource')
+  }
   const { id } = req.params;
   const {name, description, price, imageId, visibility} = req.validatedData;
   // everything is optional

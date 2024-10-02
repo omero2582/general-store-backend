@@ -17,13 +17,15 @@ import { errorHandler } from './middleware/errorMiddleware.js';
 import { AuthenticationError } from './errors/errors.js';
 import asyncHandler from 'express-async-handler';
 import { overwriteReqJsonIncludeUser } from './middleware/authMiddleware.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const app = express();
 
 // // static files
 // // need __dirname manually, since it is only available in CommonJS, and we changed to ES6 modules
-// const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// app.use(express.static(baseUrlFrontend  || path.join(__dirname, '../frontend/build')));
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+app.use(express.static(path.join(__dirname, '../general-store-frontend/dist')));
 // app.use(cors())
 app.use(express.json());
 
@@ -57,6 +59,12 @@ app.get('/api/',
 app.use('/api', indexRouter);
 
 app.use('/api/auth', authRouter);
+
+// Serve the React app for all other routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '/../general-store-frontend/dist/index.html'));
+});
+
 
 // Error Handler (catch-all)
 app.use(errorHandler);

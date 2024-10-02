@@ -4,7 +4,7 @@ import { AuthenticationError } from '../errors/errors.js';
 
 export const authMandatory = (req, res, next) => {
   if(!req.isAuthenticated()){
-    throw AuthenticationError('You must be logged in to access this resource.')
+    throw new AuthenticationError('You must be logged in to access this resource.')
   }
   return next();
 }

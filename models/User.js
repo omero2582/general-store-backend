@@ -21,7 +21,18 @@ const UserSchema = new Schema({
     // Future providers (e.g. Github, Facebook, Twitter) can go here
   },
 }, {
-  timestamps: true
+  timestamps: true,
+  methods : {
+    isUserLevelMoreThanOrEqualTo(userLevelString) {
+      const roleRanks = {
+        owner: 3,
+        admin: 2,
+        user: 1
+      };
+  
+      return roleRanks[this.userLevel] >= roleRanks[userLevelString];
+    }
+  },
 });
 
 const User = mongoose.model('User', UserSchema);
