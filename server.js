@@ -16,6 +16,7 @@ import authRouter from './routes/auth.js'
 import { errorHandler } from './middleware/errorMiddleware.js';
 import { AuthenticationError } from './errors/errors.js';
 import asyncHandler from 'express-async-handler';
+import { overwriteReqJsonIncludeUser } from './middleware/authMiddleware.js';
 
 const app = express();
 
@@ -44,19 +45,7 @@ app.use(passport.session());
 //
 
 // Middleware to override res.json() to always include req.user
-app.use((req, res, next) => {
-  const originalJson = res.json;  // Store the original res.json method
-  
-  res.json = function (body) {    // Override the res.json method
-    if (req.isAuthenticated()) {
-      body.user = req.user;       // Attach req.user to the response body
-      body.auth = true;
-    }
-    originalJson.call(this, body); // Call the original res.json with the modified body
-  };
-  
-  next();
-});
+app.use(overwriteReqJsonIncludeUser);
 
 app.get('/api/',
   asyncHandler(async (req, res) => {

@@ -17,16 +17,33 @@ passport.use(
     try {
       user = await User.findOne({ 'authProviders.google.id': profile.id });
       
+      const id = profile.id;
+      const email = profile.emails[0].value;
+      const name = profile.displayName;
+      const firstName = profile.name.givenName;
+      const lastName = profile.name.familyName;
+      const profilePicture = profile.photos[0].value;
+
       if (!user) {
         const newUser = new User({
-          name: profile.displayName,
-          username: profile.emails[0].value,
-          email: profile.emails[0].value,
+          email,
+          username: email,
+          name: firstName,
+          nameFull: {
+            firstName,
+            lastName,
+          },
+          profilePicture,
           authProviders: {
             google: {
-              id: profile.id,
-              email: profile.emails[0].value,
-              profilePicture: profile.photos[0].value,
+              id,
+              email,
+              displayName: name,
+              nameFull: {
+                firstName,
+                lastName,
+              },
+              profilePicture,
             }
           }
         });

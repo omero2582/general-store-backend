@@ -5,6 +5,9 @@ import { z } from "zod";
 import { validateFieldsZod } from '../middleware/validationMiddleware.js';
 import { addProduct, deleteProduct, editProduct, getPresignedUrl, getProducts } from '../controllers/productsController.js';
 import { productSchema } from '../../general-store-shared/schemas/schemas.js';
+import { changeUserLevelSchema } from '../../general-store-shared/schemas/schemas.js';
+import { changeUserLevel } from '../controllers/userController.js';
+import { authMandatory } from '../middleware/authMiddleware.js';
 
 // const multer = require('multer');
 // TODO custom icon on tab that serves files:
@@ -38,5 +41,10 @@ router.get('/products',
   getProducts
 )
 
+router.post('/users/level',
+  authMandatory,
+  validateFieldsZod(changeUserLevelSchema),
+  changeUserLevel
+)
 
 export default router;

@@ -70,10 +70,9 @@ export const addProduct = asyncHandler(async (req, res) => {
   // I would be forced to use uploader.remove_tag, then api.resource (2 calls),
   // Or i would have to trust the client to send in the approporate tags
     
-  let imagesWithResponses;
-  try {
-    imagesWithResponses = await Promise.allSettled(
-      images.map(async (image) => {
+  let responsesAllSettled = await Promise.allSettled(
+    images.map(async (image) => {
+      try {
         let cloudinaryResponse = await cloudinary.uploader.explicit(image.imageId, {
           type:'upload',
           context: 'linked=true'  
@@ -81,48 +80,49 @@ export const addProduct = asyncHandler(async (req, res) => {
         })
         return {...image, cloudinaryResponse}
         // we need the inner async awaits inside the .map above, because we need the result in the object we return
-     })
-    );
-
-    // Separate successful and failed responses
-    let allResponsesSuccess = [];
-    let allResponsesFail = [];
-    imagesWithResponses.forEach(({cloudinaryResponse}) => {
-      if(cloudinaryResponse.status === 'fulfilled'){
-        allResponsesSuccess.push(cloudinaryResponse.value);
-      }else{
-        allResponsesFail.push(cloudinaryResponse.reason)
+      } catch (error) {
+        throw {...image, cloudinaryResponse: error}
       }
-    });
+    })
+  );
 
-    // If some failed to add tag on explicit(), then take all the successful ones, and revert them to 'linked=false
-    // Since above we set 'linked=true', then we know that the assets DO exist, so if below throws error, its a network problem
-    if(allResponsesFail.length > 0){
-      await Promise.allSettled( // if these result in errors, then network problem
-        allResponsesSuccess.map(({cloudinaryResponse}) => {
-          return cloudinary.uploader.explicit(cloudinaryResponse.public_id, {
-            type:'upload',
-            context: 'linked=false'  
-          })
-        })
-      )
-      // TODO allSettled() above can result in err responses too, not much we can do. We are forced to add a second cron job,
-      // which will look up all the product images in our database, then compare them to our cloudinary images,
-      // and then delete the ones that arent used in any products. Not sure tho bc in the future we might wish
-      // to just show the user all their cloudinary images, and let them handle it. We'd just show them their storage limits
-      throw CustomError('Error setting context tags for image assets', {allResponsesFail})
+  // Separate successful and failed responses
+  let responsesSuccessful = [];
+  let responsesFailed = [];
+  responsesAllSettled.forEach((promise) => {
+    if(promise.status === 'fulfilled'){
+      responsesSuccessful.push(promise.value);
+    }else{
+      responsesFailed.push(promise.reason)
     }
+  });
 
-  } catch (err) {
-    throw new CloudinaryError(err);
+  // If some failed to add tag on explicit(), then take all the successful ones, and revert them to 'linked=false
+  // Since above we set 'linked=true', then we know that the assets DO exist, so if below throws error, its a network problem
+  if(responsesFailed.length > 0){
+    await Promise.allSettled( // if these result in errors, then network problem
+      responsesSuccessful.map(({cloudinaryResponse}) => {
+        return cloudinary.uploader.explicit(cloudinaryResponse.public_id, {
+          type:'upload',
+          context: 'linked=false'  
+        })
+      })
+    )
+    // TODO allSettled() above can result in err responses too, not much we can do. We are forced to add a second cron job,
+    // which will look up all the product images in our database, then compare them to our cloudinary images,
+    // and then delete the ones that arent used in any products. Not sure tho bc in the future we might wish
+    // to just show the user all their cloudinary images, and let them handle it. We'd just show them their storage limits
+    throw new CustomError('Error setting context tags for image assets', {responsesFailed})
   }
+
+  
 
   try {
     const product = new Product({
       name,
       description,
       price,
-      images: imagesWithResponses.map(({cloudinaryResponse, order, imageId}) => ({
+      images: responsesSuccessful.map(({cloudinaryResponse, order, imageId}) => ({
         url: cloudinaryResponse.secure_url,
         publicId: cloudinaryResponse.public_id,
         order
@@ -132,10 +132,10 @@ export const addProduct = asyncHandler(async (req, res) => {
     await product.save();
     res.json({messsage:`success`, product})
   } catch (error) {
-    const out = await Promise.all(
+    const imagesDeleted = await Promise.allSettled(
       images.map(({imageId}) =>cloudinary.uploader.destroy(imageId))
     );
-    throw new CustomError('Could not store product details into database', {imageDeletedStatus: out});
+    throw new CustomError('Could not store product details into database', {imagesDeleted});
     // const out = await cloudinary.uploader.destroy(imageId);
     // throw new CustomError('Could not store product details into database', {imageDeletedStatus: {...out}});
     // out.result can be "ok" || "not found", maybe more
