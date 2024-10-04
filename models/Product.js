@@ -16,6 +16,7 @@ const reshapingOptions = {
 };
 
 const ProductSchema = new Schema({
+  createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   name: { type: String, required: true },
   description: { type: String },
   price: {  // stored in cents

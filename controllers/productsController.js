@@ -20,7 +20,7 @@ export const getProducts = asyncHandler(async (req, res) => {
   if(!req.user.isUserLevelMoreThanOrEqualTo('admin')){
     throw new AuthorizationError('User Level of Admin required to access this resource')
   }
-  let products = await Product.find();
+  let products = await Product.find().populate('createdBy');
   return res.json({products});
 })
 
@@ -142,6 +142,7 @@ export const addProduct = asyncHandler(async (req, res) => {
 
   try {
     const product = new Product({
+      createdBy: req.user,
       name,
       description,
       price,
@@ -178,10 +179,19 @@ export const deleteProduct = asyncHandler(async (req, res) => {
   try {
     await session.withTransaction(async () => {
       // delete document
-      const product = await Product.findOneAndDelete({_id: id}).session(session);
+      // const product = await Product.findOneAndDelete({_id: id}).session(session);
+      const product = await Product.findById(id).populate('createdBy').session(session);
       if(!product){
         throw new NotFoundError('Product not found');
       }
+
+      const userLevel = req.user.userLevel
+      const creatorLevel = product.createdBy.userLevel;
+      if(!req.user.isUserLevelMoreThanOrEqualTo(creatorLevel)){
+        throw new AuthorizationError(`You do not have a higher user level than the product creator. ${userLevel} tried to delete product by ${creatorLevel}`);
+      }
+      // delete document
+      await product.deleteOne().session(session);
 
       // delete all images
       const imagesIds = product.images.map(p => p.publicId);
@@ -204,6 +214,9 @@ export const deleteProduct = asyncHandler(async (req, res) => {
   }
 });
 
+// TODO new new oct 3 - For editProduct, will also have to check if req.user.userLevel
+// is higher level than product.createdBy.userLevel, in the same way we check in deleteProduct.
+// Make sure to await and pass session to all transactions
 // TODO now fix after changeng DB schema from image to images
 // What im thinking is, the frontend would allow you to be in 'Edit Mode'
 // for a post, and remove/add whichever images. Then when you click on 'Save'
@@ -222,9 +235,15 @@ export const editProduct = asyncHandler(async (req, res) => {
   const {name, description, price, imageId, visibility} = req.validatedData;
   // everything is optional
 
-  const product = await Product.findById(id);
+  const product = await Product.findById(id).populate('createdBy').session(session);
   if(!product){
     throw new NotFoundError('Product not found');
+  }
+
+  const userLevel = req.user.userLevel
+  const creatorLevel = product.createdBy.userLevel;
+  if(!req.user.isUserLevelMoreThanOrEqualTo(creatorLevel)){
+    throw new AuthorizationError(`You do not have a higher user level than the product creator. ${userLevel} tried to delete product by ${creatorLevel}`);
   }
 
   // delete old image

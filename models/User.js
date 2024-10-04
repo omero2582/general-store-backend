@@ -1,5 +1,11 @@
 import mongoose from "mongoose";
 
+// TODO
+// in the future, find out what is the best way to prevent some fields to be
+// returned unless specified. We can maybe use the same 'reshapingOptions'
+// apprach we used in 'Product' model, but I am 99% sure there was another way maybe (?)
+// that was also here in the model, then when you called the model you could chain something if you 
+// wanted to include it
 const Schema = mongoose.Schema;
 
 const UserSchema = new Schema({
@@ -37,3 +43,22 @@ const UserSchema = new Schema({
 
 const User = mongoose.model('User', UserSchema);
 export default User;
+
+
+// TODO NEW after TODO above, I found the code to exclude by default,
+// it is as shown below:
+/**
+ * 
+ * you can exclude the field from the schema definition by adding the attribute
+
+    excludedField : {
+...
+    select: false,
+...
+    }
+whenever you want to add it to your result, add this to your find()
+
+find().select('+excludedFiled')
+ * 
+ * 
+ */

@@ -6,7 +6,7 @@ import User from "../models/User.js";
 const opts = {
   clientID: process.env.GOOGLE_OAUTH_CLIENT_ID,
   clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
-  callbackURL: process.env.NODE_ENV === 'development' ? '"http://localhost:3000/api/auth/google/redirect"' : '/api/auth/google/redirect',
+  callbackURL: process.env.NODE_ENV === 'development' ? 'http://localhost:3000/api/auth/google/redirect' : '/api/auth/google/redirect',
 };
 passport.use(
 	new Strategy(opts, async (accessToken, refreshToken, profile, done) => {
