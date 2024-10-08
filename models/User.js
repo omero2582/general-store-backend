@@ -46,7 +46,11 @@ export default User;
 
 
 // TODO NEW after TODO above, I found the code to exclude by default,
-// it is as shown below:
+// it is as shown below. We should 99% add this at some point, because
+// we return users in many different locations, sometimes public for example
+// if there are public profile pages or publibly on a product.createdBy.
+// So we should have some fields that are excluded by default unless the
+// controller specifies to include them. Below is the code:
 /**
  * 
  * you can exclude the field from the schema definition by adding the attribute

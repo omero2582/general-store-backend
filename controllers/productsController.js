@@ -6,6 +6,15 @@ import mongoose from 'mongoose';
 // IMPORTANT. when using 'cloudinary.api' methods, we are using the admin api,
 // which has rate limit of 500 calls per hour on free tier. 2000 per hour for paid acc
 
+export const getProductById = asyncHandler(async (req, res) => {
+  console.log('---------LOGGGG')
+  const { id } = req.params;
+  const product = await Product.findOne({_id: id, visibility: 'public'}).populate('createdBy');
+  if(!product){
+    throw new NotFoundError('Product not found');
+  }
+  return res.json({product});
+})
 
 export const getProductsPublic = asyncHandler(async (req, res) => {
   let products = await Product.find({visibility: 'public'});
