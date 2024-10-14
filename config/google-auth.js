@@ -1,6 +1,8 @@
 import passport from "passport";
 import { Strategy } from "passport-google-oauth20";
 import User from "../models/User.js";
+import Cart from "../models/Cart.js";
+import mongoose from "mongoose";
 
 
 const opts = {
@@ -14,44 +16,57 @@ passport.use(
     // to findOrCreate a new user for our DB
     console.log('PROFIELEEE', profile)
     let user;
+    const session = await mongoose.startSession();
     try {
-      user = await User.findOne({ 'authProviders.google.id': profile.id });
-      
-      const id = profile.id;
-      const email = profile.emails[0].value;
-      const name = profile.displayName;
-      const firstName = profile.name.givenName;
-      const lastName = profile.name.familyName;
-      const profilePicture = profile.photos[0].value;
+      await session.withTransaction(async () => {
+        user = await User.findOne({ 'authProviders.google.id': profile.id });
+        
+        const id = profile.id;
+        const email = profile.emails[0].value;
+        const name = profile.displayName;
+        const firstName = profile.name.givenName;
+        const lastName = profile.name.familyName;
+        const profilePicture = profile.photos[0].value;
 
-      if (!user) {
-        const newUser = new User({
-          email,
-          username: email,
-          name: firstName,
-          nameFull: {
-            firstName,
-            lastName,
-          },
-          profilePicture,
-          authProviders: {
-            google: {
-              id,
-              email,
-              displayName: name,
-              nameFull: {
-                firstName,
-                lastName,
-              },
-              profilePicture,
+        if (!user) {
+          const newUser = new User({
+            email,
+            username: email,
+            name: firstName,
+            nameFull: {
+              firstName,
+              lastName,
+            },
+            profilePicture,
+            authProviders: {
+              google: {
+                id,
+                email,
+                displayName: name,
+                nameFull: {
+                  firstName,
+                  lastName,
+                },
+                profilePicture,
+              }
             }
-          }
-        });
-        user = await newUser.save();
-      }
-      return done(null, user);
+          });
+          user = await newUser.save({session: session});
+
+          const cart = new Cart({user: user});
+          await cart.save({session: session});
+        }
+        return done(null, user);
+      });
     } catch (err) {
       return done(err, null);
+      // const {message, errors, stack} = error;
+      // if(error instanceof CustomError){
+      //   throw error;
+      // }
+      // throw new TransactionError(message);
+    } finally {
+      session.endSession();
     }
   })
 );

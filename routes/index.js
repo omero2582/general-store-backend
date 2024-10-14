@@ -8,6 +8,7 @@ import { productSchema } from '../../general-store-shared/schemas/schemas.js';
 import { changeUserLevelSchema } from '../../general-store-shared/schemas/schemas.js';
 import { changeUserLevel } from '../controllers/userController.js';
 import { authMandatory } from '../middleware/authMiddleware.js';
+import { addCartProduct, deleteCartProduct, editCartProduct, getCart } from '../controllers/cartController.js';
 
 // const multer = require('multer');
 // TODO custom icon on tab that serves files:
@@ -61,5 +62,32 @@ router.post('/users/level',
   validateFieldsZod(changeUserLevelSchema),
   changeUserLevel
 )
+
+// TODO add validation to below
+// its just quanity and productId
+// productId must be mongoId, quantity must not be less than 1 ?? unless we want
+// and editing to 0 to remove from cart??? we can do that
+// Yeah I prefer if on editCartProduct, editing quantity to 0 just deletes item
+// but on addCartProduct, adding less than 1 is a problem 
+router.get('/cart',
+  authMandatory,
+  getCart
+)
+
+router.post('/cart',
+  authMandatory,
+  addCartProduct,
+)
+
+router.patch('/cart',
+  authMandatory,
+  editCartProduct,
+)
+
+router.delete('/cart/:id',
+  authMandatory,
+  deleteCartProduct,
+)
+
 
 export default router;

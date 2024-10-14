@@ -1,7 +1,10 @@
+import '../config/env.js';
 import '../config/cloudinary.js'
 import '../config/database.js'
 import {v2 as cloudinary} from 'cloudinary'
 import Product from '../models/Product.js';
+import User from '../models/User.js';
+import Cart from '../models/Cart.js';
 
 //https://cloudinary.com/documentation/admin_api#delete_resources
 const deleteImagesArr = async () => {
@@ -105,5 +108,14 @@ const sandboxSuccessReject = async () => {
    console.log('fail', allResponsesFail)
 }
 
-const out = await Promise.allSettled([].map(() => 'r'));
-console.log(out);
+// const out = await Promise.allSettled([].map(() => 'r'));
+// console.log(out);
+
+const addCarts = async () => {
+  const users = await User.find();
+  users.map(async(u) => {
+   const cart = new Cart({user: u})
+    await cart.save();
+  });
+}
+
