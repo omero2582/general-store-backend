@@ -11,7 +11,7 @@ const Schema = mongoose.Schema;
 const UserSchema = new Schema({
   email: { type: String, unique: true, required: true, maxLength: 40 },
   username: { type: String, unique: true, required: true, maxLength: 40 },
-  name: { type: String, required: true, maxLength: 40 },
+  displayName: { type: String, required: true, maxLength: 40 },
   nameFull: { firstName: String, lastName: String },
   profilePicture: { String },
   userLevel: { type: String, enum: ['owner', 'admin', 'user'], default: 'user' },

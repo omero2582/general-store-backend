@@ -12,9 +12,15 @@ export const authMandatory = (req, res, next) => {
 export const overwriteReqJsonIncludeUser = (req, res, next) => {
   const originalJson = res.json;  // Store the original res.json method
   
+
   res.json = function (body) {    // Override the res.json method
     if (req.isAuthenticated()) {
-      body.user = req.user;       // Attach req.user to the response body
+      // add cookie info
+      // console.log(req.session.cookie);
+      const {expires, maxAge, originalMaxAge} = req.session?.cookie;
+      //
+
+      body.user = {...req.user.toObject(), cookie: {expires, maxAge, originalMaxAge}};       // Attach req.user to the response body
       body.auth = true;
     }
     originalJson.call(this, body); // Call the original res.json with the modified body

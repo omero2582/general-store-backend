@@ -32,7 +32,7 @@ passport.use(
           const newUser = new User({
             email,
             username: email,
-            name: firstName,
+            displayName: firstName,
             nameFull: {
               firstName,
               lastName,

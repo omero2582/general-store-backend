@@ -25,7 +25,7 @@ const app = express();
 // // static files
 // // need __dirname manually, since it is only available in CommonJS, and we changed to ES6 modules
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-app.use(express.static(path.join(__dirname, '../general-store-frontend/dist')));
+app.use(express.static(path.join(__dirname, '../frontend/dist')));
 // app.use(cors())
 app.use(express.json());
 
@@ -62,7 +62,7 @@ app.use('/api/auth', authRouter);
 
 // Serve the React app for all other routes
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '/../general-store-frontend/dist/index.html'));
+  res.sendFile(path.join(__dirname, '/../frontend/dist/index.html'));
 });
 
 
