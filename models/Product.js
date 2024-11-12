@@ -34,6 +34,10 @@ const ProductSchema = new Schema({
       return Number((value / 100).toFixed(2));
     }
    },
+  categories: {
+    type : [{ type: Schema.Types.ObjectId, ref: 'Category' }],
+    default: []
+  },
   visibility : { type: String, enum: ['public', 'private'], default: 'public' },
 
   // TODO these 2 will be calculated anytime a rating is added, edited, or removed

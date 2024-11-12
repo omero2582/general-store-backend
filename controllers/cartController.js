@@ -14,7 +14,8 @@ export const getCart = asyncHandler(async (req, res) => {
   // Remove from the cart, products that have been deleted
   cart.items = cart.items.filter(item => item.product !== null);
   if (cart.isModified()) {
-    await cart.save();
+    const newCart = await cart.save();
+    return res.json({ cart: newCart });
   }
   //
   return res.json({ cart });

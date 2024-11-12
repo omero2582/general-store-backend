@@ -3,6 +3,7 @@ import Product from '../models/Product.js';
 import {v2 as cloudinary} from 'cloudinary'
 import { AuthorizationError, CloudinaryError, CustomError, NotFoundError, TransactionError } from '../errors/errors.js';
 import mongoose from 'mongoose';
+import Category from '../models/Category.js';
 // IMPORTANT. when using 'cloudinary.api' methods, we are using the admin api,
 // which has rate limit of 500 calls per hour on free tier. 2000 per hour for paid acc
 
@@ -298,3 +299,58 @@ export const editProduct = asyncHandler(async (req, res) => {
 
   return res.json({message: `success`, id, imageId})
 })
+
+// Categories
+export const getCategories = asyncHandler(async (req, res) => {
+  const categories = await Category.find().populate('createdBy');
+  return res.json({categories})
+});
+
+export const addCategory = asyncHandler(async (req, res) => {
+  if(!req.user.isUserLevelMoreThanOrEqualTo('admin')){
+    throw new AuthorizationError('User Level of Admin required to access this resource')
+  }
+  const { name } = req.body;
+  const categoryFound = await Category.findOne({ name: { $regex: new RegExp(`^${name}$`, 'i') } })
+  if(categoryFound){
+    throw new CustomError(`Category '${name}' Already Exists`)
+  }
+
+  const newCategory = new Category({name, createdBy: req.user})
+  const category = await newCategory.save();
+  return res.json({category})
+});
+
+export const deleteCategory = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  if(!req.user.isUserLevelMoreThanOrEqualTo('admin')){
+    throw new AuthorizationError('User Level of Admin required to access this resource')
+  }
+  // const { name } = req.body;
+  // const categoryFound = await Category.findOne({ name: { $regex: new RegExp(`^${name}$`, 'i') } })
+  const categoryFound = await Category.findById(id);
+  if(!categoryFound){
+    throw new NotFoundError(`Category Not Found`)
+  }
+
+  const category = await categoryFound.deleteOne();
+  return res.json({category})
+});
+
+export const editCategory = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { name } = req.body;
+  
+  if(!req.user.isUserLevelMoreThanOrEqualTo('admin')){
+    throw new AuthorizationError('User Level of Admin required to access this resource')
+  }
+  // const categoryFound = await Category.findOne({ name: { $regex: new RegExp(`^${name}$`, 'i') } })
+  const categoryFound = await Category.findById(id);
+  if(!categoryFound){
+    throw new NotFoundError(`Category Not Found`)
+  }
+
+  categoryFound.name = name;
+  const category = await categoryFound.save();
+  return res.json({category})
+});

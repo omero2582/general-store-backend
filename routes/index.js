@@ -3,9 +3,9 @@ import asyncHandler from 'express-async-handler';
 import '../config/cloudinary.js'
 import { z } from "zod";
 import { validateFieldsZod } from '../middleware/validationMiddleware.js';
-import { addProduct, deleteProduct, editProduct, getPresignedUrl, getProductById, getProducts, getProductsPublic } from '../controllers/productsController.js';
-import { productSchema } from '../../shared/schemas/schemas.js';
-import { changeUserLevelSchema } from '../../shared/schemas/schemas.js';
+import { addCategory, addProduct, deleteCategory, deleteProduct, editCategory, editProduct, getCategories, getPresignedUrl, getProductById, getProducts, getProductsPublic } from '../controllers/productsController.js';
+import { productSchema } from '../../shared/dist/schemas.js';
+import { changeUserLevelSchema } from '../../shared/dist/schemas.js';
 import { changeUserLevel } from '../controllers/userController.js';
 import { authMandatory } from '../middleware/authMiddleware.js';
 import { addCartProduct, deleteCartProduct, editCartProduct, getCart } from '../controllers/cartController.js';
@@ -87,6 +87,24 @@ router.patch('/cart',
 router.delete('/cart/:id',
   authMandatory,
   deleteCartProduct,
+)
+
+// Categories
+router.get('/categories',
+  getCategories,
+)
+
+router.post('/categories',
+  authMandatory,
+  addCategory,
+)
+router.delete('/categories/:id',
+  authMandatory,
+  deleteCategory,
+)
+router.patch('/categories/:id',
+  authMandatory,
+  editCategory,
 )
 
 
