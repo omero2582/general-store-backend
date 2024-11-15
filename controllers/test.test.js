@@ -2,6 +2,7 @@ import '../config/env.js';
 import '../config/cloudinary.js'
 import '../config/database.js'
 import {v2 as cloudinary} from 'cloudinary'
+import Category from '../models/Category.js';
 import Product from '../models/Product.js';
 import User from '../models/User.js';
 import Cart from '../models/Cart.js';
@@ -119,3 +120,7 @@ const addCarts = async () => {
   });
 }
 
+const productsCategoryRaw = await Product.findById('673579b61724503af6e722b5');
+const productsCategoryIncluded = await Product.findById('673579b61724503af6e722b5').populate('categories');
+console.log(productsCategoryRaw.categories);
+console.log(productsCategoryIncluded.categories);

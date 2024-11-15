@@ -18,7 +18,7 @@ export const getProductById = asyncHandler(async (req, res) => {
 })
 
 export const getProductsPublic = asyncHandler(async (req, res) => {
-  let products = await Product.find({visibility: 'public'});
+  let products = await Product.find({visibility: 'public'}).populate('categories');
   // if (!products.length) {
   //   throw new NotFoundError('No products found');
   // }
@@ -30,7 +30,7 @@ export const getProducts = asyncHandler(async (req, res) => {
   if(!req.user.isUserLevelMoreThanOrEqualTo('admin')){
     throw new AuthorizationError('User Level of Admin required to access this resource')
   }
-  let products = await Product.find().populate('createdBy');
+  let products = await Product.find().populate(['createdBy', 'categories']);
   return res.json({products});
 })
 
@@ -92,7 +92,7 @@ export const addProduct = asyncHandler(async (req, res) => {
   if(!req.user.isUserLevelMoreThanOrEqualTo('admin')){
     throw new AuthorizationError('User Level of Admin required to access this resource')
   }
-  const {name, description, price, images, visibility} = req.validatedData;
+  const {name, description, price, images, visibility, categories} = req.validatedData;
   // const out = await cloudinary.uploader.remove_tag('unlinked', [imageId]);
   // above just returns an array  like: "public_ids": ["omero_vs_yassuo_old_icon_NAMES_CLOSER_1_vpntlt"]
   // if(out.public_ids.length === 0){
@@ -156,6 +156,7 @@ export const addProduct = asyncHandler(async (req, res) => {
       name,
       description,
       price,
+      categories,
       images: responsesSuccessful.map(({cloudinaryResponse, order, imageId}) => ({
         url: cloudinaryResponse.secure_url,
         publicId: cloudinaryResponse.public_id,
@@ -321,6 +322,7 @@ export const addCategory = asyncHandler(async (req, res) => {
   return res.json({category})
 });
 
+// Deletes Category + Removes Category from all Products that contain this category
 export const deleteCategory = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if(!req.user.isUserLevelMoreThanOrEqualTo('admin')){
@@ -328,13 +330,33 @@ export const deleteCategory = asyncHandler(async (req, res) => {
   }
   // const { name } = req.body;
   // const categoryFound = await Category.findOne({ name: { $regex: new RegExp(`^${name}$`, 'i') } })
-  const categoryFound = await Category.findById(id);
-  if(!categoryFound){
-    throw new NotFoundError(`Category Not Found`)
-  }
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
 
-  const category = await categoryFound.deleteOne();
-  return res.json({category})
+      const categoryFound = await Category.findById(id);
+      if(!categoryFound){
+        throw new NotFoundError(`Category Not Found`)
+      }
+      const category = await categoryFound.deleteOne().session(session);
+
+      await Product.updateMany(
+        { categories: id },
+        { $pull: { categories: id } }
+      ).session(session);
+      
+      return res.json({category})
+    });
+  } catch (error) {
+    const {message, errors, stack} = error;
+    if(error instanceof CustomError){
+      throw error;
+    }
+    throw new TransactionError(message);
+  } finally {
+    session.endSession();
+  }
+  
 });
 
 export const editCategory = asyncHandler(async (req, res) => {
