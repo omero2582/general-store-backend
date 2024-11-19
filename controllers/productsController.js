@@ -88,11 +88,8 @@ export const getPresignedUrl = asyncHandler(async (req, res) => {
 
 //https://cloudinary.com/documentation/update_assets
 //https://cloudinary.com/documentation/image_upload_api_reference#explicit
-export const addProduct = asyncHandler(async (req, res) => {
-  if(!req.user.isUserLevelMoreThanOrEqualTo('admin')){
-    throw new AuthorizationError('User Level of Admin required to access this resource')
-  }
-  const {name, description, price, images, visibility, categories} = req.validatedData;
+// TODO test if this errors out if the parent function catches this correectly with async handler
+const markAsUploaded = async (images) => {
   // const out = await cloudinary.uploader.remove_tag('unlinked', [imageId]);
   // above just returns an array  like: "public_ids": ["omero_vs_yassuo_old_icon_NAMES_CLOSER_1_vpntlt"]
   // if(out.public_ids.length === 0){
@@ -148,7 +145,17 @@ export const addProduct = asyncHandler(async (req, res) => {
     throw new CustomError('Error setting context tags for image assets', {responsesFailed})
   }
 
+  return {responsesAllSettled, responsesSuccessful, responsesFailed}
+}
+
+
+export const addProduct = asyncHandler(async (req, res) => {
+  if(!req.user.isUserLevelMoreThanOrEqualTo('admin')){
+    throw new AuthorizationError('User Level of Admin required to access this resource')
+  }
+  const {name, description, price, images, visibility, categories} = req.validatedData;
   
+  const { responsesSuccessful } = await markAsUploaded(images)
 
   try {
     const product = new Product({
@@ -164,8 +171,10 @@ export const addProduct = asyncHandler(async (req, res) => {
       })),
       visibility,
     });
-    await product.save();
-    res.json({messsage:`success`, product})
+
+    const newProduct = await product.save();
+    res.json({product: newProduct})
+
   } catch (error) {
     const imagesDeleted = await Promise.allSettled(
       images.map(({imageId}) =>cloudinary.uploader.destroy(imageId))
@@ -225,10 +234,6 @@ export const deleteProduct = asyncHandler(async (req, res) => {
   }
 });
 
-// TODO new new oct 3 - For editProduct, will also have to check if req.user.userLevel
-// is higher level than product.createdBy.userLevel, in the same way we check in deleteProduct.
-// Make sure to await and pass session to all transactions
-// TODO now fix after changeng DB schema from image to images
 // What im thinking is, the frontend would allow you to be in 'Edit Mode'
 // for a post, and remove/add whichever images. Then when you click on 'Save'
 // it would start the porcess:
@@ -243,109 +248,84 @@ export const editProduct = asyncHandler(async (req, res) => {
     throw new AuthorizationError('User Level of Admin required to access this resource')
   }
   const { id } = req.params;
-  const {name, description, price, imageId, visibility} = req.validatedData;
-  // everything is optional
+  const {name, description, price, images, visibility, categories} = req.validatedData;
 
-  const product = await Product.findById(id).populate('createdBy').session(session);
-  if(!product){
-    throw new NotFoundError('Product not found');
-  }
-
-  const userLevel = req.user.userLevel
-  const creatorLevel = product.createdBy.userLevel;
-  if(!req.user.isUserLevelMoreThanOrEqualTo(creatorLevel)){
-    throw new AuthorizationError(`You do not have a higher user level than the product creator. ${userLevel} tried to delete product by ${creatorLevel}`);
-  }
-
-  // delete old image
-  const imageIdOld = product.image.publicId;
-  const imageDeleteResult = await cloudinary.uploader.destroy(imageIdOld);
-
-  if(imageDeleteResult?.result!== 'ok'){
-    throw new CustomError('Old Product Image could not be deleted')
-  }
-
-  //tag new image as linked in cloudnary
-  if(imageId){
-    let cloudinaryResponse;
-    try {
-      cloudinaryResponse = await cloudinary.uploader.explicit(imageId, {
-        type:'upload',
-        context: 'linked=true'  
-        // this deletes all other context besides this, right now we dont have any
-      })
-      // replace image DB entry
-      product.image = {
-        url: cloudinaryResponse.secure_url,
-        publicId: cloudinaryResponse.public_id,
-      }
-    } catch (err) {
-      throw new CloudinaryError(err);
-    }
-  }
-
-  // Edit rest of document
-  product.name = name ?? product.name;
-  product.description = description ?? product.description;
-  product.price = price ?? product.price;
-  product.visibility = visibility?? product.visibility;
-
-  try {
-    await product.save()
-  } catch (error) {
-    const out = await cloudinary.uploader.destroy(imageId);
-    // out.result can be "ok" || "not found", maybe more
-    throw new CustomError('Could not edit product details into database', {error, imageDeletedStatus: {...out}});
-  }
-
-  return res.json({message: `success`, id, imageId})
-})
-
-// Categories
-export const getCategories = asyncHandler(async (req, res) => {
-  const categories = await Category.find().populate('createdBy');
-  return res.json({categories})
-});
-
-export const addCategory = asyncHandler(async (req, res) => {
-  if(!req.user.isUserLevelMoreThanOrEqualTo('admin')){
-    throw new AuthorizationError('User Level of Admin required to access this resource')
-  }
-  const { name } = req.body;
-  const categoryFound = await Category.findOne({ name: { $regex: new RegExp(`^${name}$`, 'i') } })
-  if(categoryFound){
-    throw new CustomError(`Category '${name}' Already Exists`)
-  }
-
-  const newCategory = new Category({name, createdBy: req.user})
-  const category = await newCategory.save();
-  return res.json({category})
-});
-
-// Deletes Category + Removes Category from all Products that contain this category
-export const deleteCategory = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  if(!req.user.isUserLevelMoreThanOrEqualTo('admin')){
-    throw new AuthorizationError('User Level of Admin required to access this resource')
-  }
-  // const { name } = req.body;
-  // const categoryFound = await Category.findOne({ name: { $regex: new RegExp(`^${name}$`, 'i') } })
   const session = await mongoose.startSession();
   try {
     await session.withTransaction(async () => {
-
-      const categoryFound = await Category.findById(id);
-      if(!categoryFound){
-        throw new NotFoundError(`Category Not Found`)
+      const product = await Product.findById(id).populate('createdBy').session(session);
+      if(!product){
+        throw new NotFoundError('Product not found');
       }
-      const category = await categoryFound.deleteOne().session(session);
+    
+      const userLevel = req.user.userLevel
+      const creatorLevel = product.createdBy.userLevel;
+      if(!req.user.isUserLevelMoreThanOrEqualTo(creatorLevel)){
+        throw new AuthorizationError(`You do not have a higher user level than the product creator. ${userLevel} tried to delete product by ${creatorLevel}`);
+      }
+    
 
-      await Product.updateMany(
-        { categories: id },
-        { $pull: { categories: id } }
-      ).session(session);
-      
-      return res.json({category})
+      // Delete old images
+      // TODO TODO - this delete chunk next 15 lines or so should maybe be moved
+      // to after the document is saved, because if we delete image first, then
+      // run into an error later, then we can end up with a document that was not
+      // edited, but its images have been deleted from cloudinary
+      const imagesToDelete = []
+      product.images.forEach(dbImg => {
+        if(!images.find(inputImg => inputImg.imageId === dbImg.publicId)){
+          imagesToDelete.push(dbImg);
+        }
+      })
+      // TODO check above
+    
+      // Below should be good, taken from deleteProduct
+      // TODO TODO.. wait dont .api methods have a rate limit ?? like .api.delete_resources?
+      if(imagesToDelete.length > 0){
+        const imagesIds = imagesToDelete.map(p => p.publicId);
+        const imageDeleteResult = await cloudinary.api.delete_resources(imagesIds);
+        const hasDeletedAtLeastOne =  Object.values(imageDeleteResult.deleted).some(value => value === 'deleted');
+        if(!hasDeletedAtLeastOne){
+          throw new CustomError('Old Products Images could be deleted. Product changed couldnot be saved', {error: imageDeleteResult})
+        }
+      }
+    
+      // TODO this includes images that might already have been in the doc before, maybe change this to new images only?
+      // if I fix this in the future, remember that we also need the backend route
+      // to be fool-proof, AKA if I rely on images having a '.url' to mean that it
+      // has already been uploaded to cloudinary, then a malicious user can just add
+      // a '.url' and send a request to my backend not through my frontend, and point the
+      // url to a random url. (AKA the image has never and will never be uplaoded to cloudinary)
+      const { responsesSuccessful } = await markAsUploaded(images);
+    
+      // Edit rest of document
+      product.name = name ?? product.name;
+      product.description = description ?? product.description;
+      product.price = price ?? product.price;
+      product.visibility = visibility?? product.visibility;
+      product.categories = categories ?? product.categories;
+      product.images = images ?? responsesSuccessful.map(({cloudinaryResponse, order, imageId}) => ({
+        url: cloudinaryResponse.secure_url,
+        publicId: cloudinaryResponse.public_id,
+        order
+      })),
+      product.visibility = visibility ?? product.visibility;
+    
+      try {
+        if (product.isModified()) {
+          const newProduct = await product.save({session});
+          return res.json({ product: newProduct });
+        }
+        return res.json({ product });
+    
+      } catch (error) {
+        const imagesDeleted = await Promise.allSettled(
+          images.map(({imageId}) =>cloudinary.uploader.destroy(imageId))
+        );
+        throw new CustomError('Could not store product details into database', {imagesDeleted});
+        // const out = await cloudinary.uploader.destroy(imageId);
+        // throw new CustomError('Could not store product details into database', {imageDeletedStatus: {...out}});
+        // out.result can be "ok" || "not found", maybe more
+      }
     });
   } catch (error) {
     const {message, errors, stack} = error;
@@ -356,23 +336,7 @@ export const deleteCategory = asyncHandler(async (req, res) => {
   } finally {
     session.endSession();
   }
-  
-});
 
-export const editCategory = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { name } = req.body;
   
-  if(!req.user.isUserLevelMoreThanOrEqualTo('admin')){
-    throw new AuthorizationError('User Level of Admin required to access this resource')
-  }
-  // const categoryFound = await Category.findOne({ name: { $regex: new RegExp(`^${name}$`, 'i') } })
-  const categoryFound = await Category.findById(id);
-  if(!categoryFound){
-    throw new NotFoundError(`Category Not Found`)
-  }
+})
 
-  categoryFound.name = name;
-  const category = await categoryFound.save();
-  return res.json({category})
-});

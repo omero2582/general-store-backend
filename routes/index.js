@@ -3,12 +3,13 @@ import asyncHandler from 'express-async-handler';
 import '../config/cloudinary.js'
 import { z } from "zod";
 import { validateFieldsZod } from '../middleware/validationMiddleware.js';
-import { addCategory, addProduct, deleteCategory, deleteProduct, editCategory, editProduct, getCategories, getPresignedUrl, getProductById, getProducts, getProductsPublic } from '../controllers/productsController.js';
+import {  addProduct, deleteProduct, editProduct, getPresignedUrl, getProductById, getProducts, getProductsPublic } from '../controllers/productsController.js';
 import { productSchema } from '../../shared/dist/schemas.js';
 import { changeUserLevelSchema } from '../../shared/dist/schemas.js';
 import { changeUserLevel } from '../controllers/userController.js';
 import { authMandatory } from '../middleware/authMiddleware.js';
 import { addCartProduct, deleteCartProduct, editCartProduct, getCart } from '../controllers/cartController.js';
+import { addCategory, deleteCategory, editCategory, getCategories } from '../controllers/categoryController.js';
 
 // const multer = require('multer');
 // TODO custom icon on tab that serves files:
