@@ -120,7 +120,11 @@ const addCarts = async () => {
   });
 }
 
-const productsCategoryRaw = await Product.findById('673579b61724503af6e722b5');
-const productsCategoryIncluded = await Product.findById('673579b61724503af6e722b5').populate('categories');
-console.log(productsCategoryRaw.categories);
-console.log(productsCategoryIncluded.categories);
+// const productsCategoryRaw = await Product.findById('673579b61724503af6e722b5');
+// const productsCategoryIncluded = await Product.findById('673579b61724503af6e722b5').populate('categories');
+// console.log(productsCategoryRaw.categories);
+// console.log(productsCategoryIncluded.categories);
+
+
+const out = await deleteImagesArr();
+console.log(out);

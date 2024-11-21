@@ -4,6 +4,9 @@ import {v2 as cloudinary} from 'cloudinary'
 import { AuthorizationError, CloudinaryError, CustomError, NotFoundError, TransactionError } from '../errors/errors.js';
 import mongoose from 'mongoose';
 import Category from '../models/Category.js';
+import { generatePreSignedUrl, markAsUploaded } from '../services/cloudinary.js';
+
+import {isEqual} from 'lodash'
 // IMPORTANT. when using 'cloudinary.api' methods, we are using the admin api,
 // which has rate limit of 500 calls per hour on free tier. 2000 per hour for paid acc
 
@@ -19,10 +22,6 @@ export const getProductById = asyncHandler(async (req, res) => {
 
 export const getProductsPublic = asyncHandler(async (req, res) => {
   let products = await Product.find({visibility: 'public'}).populate('categories');
-  // if (!products.length) {
-  //   throw new NotFoundError('No products found');
-  // }
-  // prob just return empty array if no products
   return res.json({products});
 })
 
@@ -34,119 +33,15 @@ export const getProducts = asyncHandler(async (req, res) => {
   return res.json({products});
 })
 
-// options for upload:
-//https://cloudinary.com/documentation/image_upload_api_reference#upload_optional_parameters
+
 export const getPresignedUrl = asyncHandler(async (req, res) => {
   if(!req.user.isUserLevelMoreThanOrEqualTo('admin')){
     throw new AuthorizationError('User Level of Admin required to access this resource')
   }
-  try {
-    const options = {
-      timestamp: Math.round(new Date().getTime() / 1000),
-      asset_folder: 'products',
-      allowed_formats: ['jpg', 'png', 'webp', 'jfif'],
-      use_filename: true,
-      context: 'linked=false|test=true'
-      // to add more context, separate them with pipe, for ex: 'linked=false|abc=true'
-      // not sure how else to add multiple contexts . Object doesnt work
-    }
-    // tags: 'unlinked',
-    // eager: 'c_pad,h_300,w_400|c_crop,h_200,w_260',
-    // access_mode: can be public or authenticated. defaults to public
-    // access_control
-    // context
-    // metadata
-
-    // context, metadata, and tags are all types of metadata:
-    // https://cloudinary.com/documentation/custom_metadata
-    // The main differeneces are:
-    // tags = array of string
-    // context = array of key/value pairs
-    // metadata = same as context, but the fields are defined GLOBALLY on a project
-    // not sure if I should add metadata besides tags. If I do, I could
-    // add things like 'title' and 'description'. But I will already be 
-    // addding this to the database, where I prefer it, so I don't see the point
-    // of adding it here too, since we will always be browsing products by looking
-    // at our database and each prducts url there, not by browsing cloudinary
-    
-    const signature = cloudinary.utils.api_sign_request({
-    ...options
-    },  cloudinary.config().api_secret);
-
-    res.json({ 
-      cloudname: cloudinary.config().cloud_name,
-      options: {
-        api_key: cloudinary.config().api_key,
-        signature,
-        ...options
-      }
-    });
-  } catch (err) {
-    throw new CustomError('Failed to generate pre-signed URL');
-  }
+ 
+  const out = await generatePreSignedUrl();
+  res.json(out)
 })
-
-//https://cloudinary.com/documentation/update_assets
-//https://cloudinary.com/documentation/image_upload_api_reference#explicit
-// TODO test if this errors out if the parent function catches this correectly with async handler
-const markAsUploaded = async (images) => {
-  // const out = await cloudinary.uploader.remove_tag('unlinked', [imageId]);
-  // above just returns an array  like: "public_ids": ["omero_vs_yassuo_old_icon_NAMES_CLOSER_1_vpntlt"]
-  // if(out.public_ids.length === 0){
-  //   throw new Error('image not found')
-  // }
-  // I prefer context instead of tags, like below, because maybe in the future maybe I want to
-  // allow tags input, and then it would be problematic to keep them here
-  // I would be forced to use uploader.remove_tag, then api.resource (2 calls),
-  // Or i would have to trust the client to send in the approporate tags
-    
-  let responsesAllSettled = await Promise.allSettled(
-    images.map(async (image) => {
-      try {
-        let cloudinaryResponse = await cloudinary.uploader.explicit(image.imageId, {
-          type:'upload',
-          context: 'linked=true'  
-          // this deletes all other context besides this, right now we dont have any
-        })
-        return {...image, cloudinaryResponse}
-        // we need the inner async awaits inside the .map above, because we need the result in the object we return
-      } catch (error) {
-        throw {...image, cloudinaryResponse: error}
-      }
-    })
-  );
-
-  // Separate successful and failed responses
-  let responsesSuccessful = [];
-  let responsesFailed = [];
-  responsesAllSettled.forEach((promise) => {
-    if(promise.status === 'fulfilled'){
-      responsesSuccessful.push(promise.value);
-    }else{
-      responsesFailed.push(promise.reason)
-    }
-  });
-
-  // If some failed to add tag on explicit(), then take all the successful ones, and revert them to 'linked=false
-  // Since above we set 'linked=true', then we know that the assets DO exist, so if below throws error, its a network problem
-  if(responsesFailed.length > 0){
-    await Promise.allSettled( // if these result in errors, then network problem
-      responsesSuccessful.map(({cloudinaryResponse}) => {
-        return cloudinary.uploader.explicit(cloudinaryResponse.public_id, {
-          type:'upload',
-          context: 'linked=false'  
-        })
-      })
-    )
-    // TODO allSettled() above can result in err responses too, not much we can do. We are forced to add a second cron job,
-    // which will look up all the product images in our database, then compare them to our cloudinary images,
-    // and then delete the ones that arent used in any products. Not sure tho bc in the future we might wish
-    // to just show the user all their cloudinary images, and let them handle it. We'd just show them their storage limits
-    throw new CustomError('Error setting context tags for image assets', {responsesFailed})
-  }
-
-  return {responsesAllSettled, responsesSuccessful, responsesFailed}
-}
 
 
 export const addProduct = asyncHandler(async (req, res) => {
@@ -216,10 +111,12 @@ export const deleteProduct = asyncHandler(async (req, res) => {
       // delete all images
       const imagesIds = product.images.map(p => p.publicId);
       const imageDeleteResult = await cloudinary.api.delete_resources(imagesIds);
-      const hasDeletedAtLeastOne =  Object.values(imageDeleteResult.deleted).some(value => value === 'deleted');
-      if(!hasDeletedAtLeastOne){
-        throw new CustomError('No Product Images could be deleted. Product was not deleted', {error: imageDeleteResult})
-      }
+      // Its ok if no images are found, a product might somehow end up with some images pointing to
+      // resources that have already been deleted. And in this case, we still want the req to return sucess and product doc to be altered
+      // const hasDeletedAtLeastOne =  Object.values(imageDeleteResult.deleted).some(value => value === 'deleted');
+      // if(!hasDeletedAtLeastOne){
+      //   throw new CustomError('No Product Images could be deleted. Product was not deleted', {error: imageDeleteResult})
+      // }
 
       return res.json({message: `success`, result: imageDeleteResult})
     });
@@ -270,44 +167,83 @@ export const editProduct = asyncHandler(async (req, res) => {
       // to after the document is saved, because if we delete image first, then
       // run into an error later, then we can end up with a document that was not
       // edited, but its images have been deleted from cloudinary
-      const imagesToDelete = []
+      const imagesToDelete = [] //images previously in DB but not in input
+      const imagesToAdd = [] // images not in DB but in input
+      const imagesInBothDbAndInput = [] // images in both DB and input
+      // product.images.forEach(dbImg => {
+      //   if(!images.find(inputImg => inputImg.imageId === dbImg.publicId)){
+      //     imagesToDelete.push(dbImg);
+      //   }else{
+      //     imagesInBothDbAndInput.push(dbImg)
+      //   }
+      // })
+
+      // images.forEach(inputImg => {
+      //   if (!product.images.find(dbImg => dbImg.publicId === inputImg.imageId)) {
+      //     imagesToAdd.push(inputImg);
+      //   }
+      // });
+
+
+      const inputImageIds = new Set(images.map(inputImg => inputImg.imageId));
       product.images.forEach(dbImg => {
-        if(!images.find(inputImg => inputImg.imageId === dbImg.publicId)){
+        if (inputImageIds.has(dbImg.publicId)) {
+          imagesInBothDbAndInput.push(dbImg);
+        } else {
           imagesToDelete.push(dbImg);
         }
-      })
+      });
+
+      const dbImageIds = new Set(product.images.map(dbImg => dbImg.publicId));
+      images.forEach(inputImg => {
+        if (!dbImageIds.has(inputImg.imageId)) {
+          imagesToAdd.push(inputImg);
+        }
+      });
+      
       // TODO check above
     
-      // Below should be good, taken from deleteProduct
-      // TODO TODO.. wait dont .api methods have a rate limit ?? like .api.delete_resources?
       if(imagesToDelete.length > 0){
         const imagesIds = imagesToDelete.map(p => p.publicId);
         const imageDeleteResult = await cloudinary.api.delete_resources(imagesIds);
-        const hasDeletedAtLeastOne =  Object.values(imageDeleteResult.deleted).some(value => value === 'deleted');
-        if(!hasDeletedAtLeastOne){
-          throw new CustomError('Old Products Images could be deleted. Product changed couldnot be saved', {error: imageDeleteResult})
-        }
+        // Its ok if no images are found, a product might somehow end up pointing to some images
+        // resources that have already been deleted. And in this case, we still want the req to
+        // return sucess and product doc to be altered
+        // const hasDeletedAtLeastOne =  Object.values(imageDeleteResult.deleted).some(value => value === 'deleted');
+        // if(!hasDeletedAtLeastOne){
+        //   throw new CustomError('Old Products Images could be deleted. Product changed couldnot be saved', {error: imageDeleteResult})
+        // }
       }
     
-      // TODO this includes images that might already have been in the doc before, maybe change this to new images only?
-      // if I fix this in the future, remember that we also need the backend route
-      // to be fool-proof, AKA if I rely on images having a '.url' to mean that it
-      // has already been uploaded to cloudinary, then a malicious user can just add
-      // a '.url' and send a request to my backend not through my frontend, and point the
-      // url to a random url. (AKA the image has never and will never be uplaoded to cloudinary)
-      const { responsesSuccessful } = await markAsUploaded(images);
+      // TODO below images comes from req input. It can include images that are both in 
+      // the doc prior to changes AND stay in the doc (have already been marked as Uploaded).
+      // It can also contain malicious input pointing to images that are not in our cloudnary storage
+      // This is ok though because this function also serves the purpose of locating and
+      // returning the files in our cloudinary storage (if any)
+      // And there is no downside to re-marking images that wer marked prior, exccept
+      // that it re-writes ALL their tags
+      // TODO The problem with only inlcuindg here new images, is that we would still
+      // need to verify that the old images come from our storage???
+      // jk I guess we wouldnt need to verify since we have already marked them as sucess...
+      /// HMMMM ok then maybe we CAN change this so it only inlcudes new images
+      // const { responsesSuccessful } = await markAsUploaded(images);
+      const { responsesSuccessful } = await markAsUploaded(imagesToAdd);
     
       // Edit rest of document
+      const imagesMarkedAsUploaded = responsesSuccessful.map(({cloudinaryResponse, order, imageId}) => ({
+        url: cloudinaryResponse.secure_url,
+        publicId: cloudinaryResponse.public_id,
+        order
+      }))
+      const newImages = [...imagesMarkedAsUploaded, ...imagesInBothDbAndInput];
+      if (!isEqual(product.images, newImages)) {
+        product.images = newImages;
+      }
       product.name = name ?? product.name;
       product.description = description ?? product.description;
       product.price = price ?? product.price;
       product.visibility = visibility?? product.visibility;
       product.categories = categories ?? product.categories;
-      product.images = images ?? responsesSuccessful.map(({cloudinaryResponse, order, imageId}) => ({
-        url: cloudinaryResponse.secure_url,
-        publicId: cloudinaryResponse.public_id,
-        order
-      })),
       product.visibility = visibility ?? product.visibility;
     
       try {
