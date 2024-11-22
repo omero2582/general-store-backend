@@ -7,7 +7,7 @@ import { CustomError } from '../errors/errors.js';
 // This function accomplished 2 things: 1 it marks them as uploaded, 2 it confirms that the
 // image is actually in our cloudinary storage by returning its info if found
 export const markAsUploaded = async (images) => {
-  // const out = await cloudinary.uploader.remove_tag('unlinked', [imageId]);
+  // const out = await cloudinary.uploader.remove_tag('unlinked', [publicId]);
   // above just returns an array  like: "public_ids": ["omero_vs_yassuo_old_icon_NAMES_CLOSER_1_vpntlt"]
   // if(out.public_ids.length === 0){
   //   throw new Error('image not found')
@@ -20,7 +20,7 @@ export const markAsUploaded = async (images) => {
   let responsesAllSettled = await Promise.allSettled(
     images.map(async (image) => {
       try {
-        let cloudinaryResponse = await cloudinary.uploader.explicit(image.imageId, {
+        let cloudinaryResponse = await cloudinary.uploader.explicit(image.publicId, {
           type:'upload',
           context: 'linked=true'  
           // this deletes all other context besides this, right now we dont have any

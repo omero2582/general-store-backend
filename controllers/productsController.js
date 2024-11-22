@@ -6,7 +6,7 @@ import mongoose from 'mongoose';
 import Category from '../models/Category.js';
 import { generatePreSignedUrl, markAsUploaded } from '../services/cloudinary.js';
 
-import {isEqual} from 'lodash'
+import _ from 'lodash'
 // IMPORTANT. when using 'cloudinary.api' methods, we are using the admin api,
 // which has rate limit of 500 calls per hour on free tier. 2000 per hour for paid acc
 
@@ -59,7 +59,7 @@ export const addProduct = asyncHandler(async (req, res) => {
       description,
       price,
       categories,
-      images: responsesSuccessful.map(({cloudinaryResponse, order, imageId}) => ({
+      images: responsesSuccessful.map(({cloudinaryResponse, order, publicId}) => ({
         url: cloudinaryResponse.secure_url,
         publicId: cloudinaryResponse.public_id,
         order
@@ -72,10 +72,10 @@ export const addProduct = asyncHandler(async (req, res) => {
 
   } catch (error) {
     const imagesDeleted = await Promise.allSettled(
-      images.map(({imageId}) =>cloudinary.uploader.destroy(imageId))
+      images.map(({publicId}) =>cloudinary.uploader.destroy(publicId))
     );
     throw new CustomError('Could not store product details into database', {imagesDeleted});
-    // const out = await cloudinary.uploader.destroy(imageId);
+    // const out = await cloudinary.uploader.destroy(publicId);
     // throw new CustomError('Could not store product details into database', {imageDeletedStatus: {...out}});
     // out.result can be "ok" || "not found", maybe more
   }
@@ -131,13 +131,13 @@ export const deleteProduct = asyncHandler(async (req, res) => {
   }
 });
 
-// What im thinking is, the frontend would allow you to be in 'Edit Mode'
-// for a post, and remove/add whichever images. Then when you click on 'Save'
-// it would start the porcess:
+// Frontend allows you to edit product to remove/add whichever images.
+// Submitting the form starts the process:
 // 1- Get a presigned URL to upload any new images
 // 2- Use the presign URL in the frontend to upload the new images
-// 3- Backend recieves an array of 'imagesIds'. It retrives the prduct, and
-// diffs the new imagesIds vs the existing imagesIds, to find which images to delete.
+// 3- Backend recieves an array of 'imagesIds' with entire set of imageIds to save to db.
+// It retrives the prduct, and diffs the new imagesIds vs the existing imagesIds,
+// to find which images to delete.
 // 4- Backend starts a transaction where it sets the new imagesIds, then it deletes
 // the images that need to be deleted from cloudinary
 export const editProduct = asyncHandler(async (req, res) => {
@@ -160,83 +160,48 @@ export const editProduct = asyncHandler(async (req, res) => {
       if(!req.user.isUserLevelMoreThanOrEqualTo(creatorLevel)){
         throw new AuthorizationError(`You do not have a higher user level than the product creator. ${userLevel} tried to delete product by ${creatorLevel}`);
       }
-    
-
-      // Delete old images
-      // TODO TODO - this delete chunk next 15 lines or so should maybe be moved
-      // to after the document is saved, because if we delete image first, then
-      // run into an error later, then we can end up with a document that was not
-      // edited, but its images have been deleted from cloudinary
+      
       const imagesToDelete = [] //images previously in DB but not in input
       const imagesToAdd = [] // images not in DB but in input
       const imagesInBothDbAndInput = [] // images in both DB and input
-      // product.images.forEach(dbImg => {
-      //   if(!images.find(inputImg => inputImg.imageId === dbImg.publicId)){
-      //     imagesToDelete.push(dbImg);
-      //   }else{
-      //     imagesInBothDbAndInput.push(dbImg)
-      //   }
-      // })
-
-      // images.forEach(inputImg => {
-      //   if (!product.images.find(dbImg => dbImg.publicId === inputImg.imageId)) {
-      //     imagesToAdd.push(inputImg);
-      //   }
-      // });
-
-
-      const inputImageIds = new Set(images.map(inputImg => inputImg.imageId));
-      product.images.forEach(dbImg => {
-        if (inputImageIds.has(dbImg.publicId)) {
-          imagesInBothDbAndInput.push(dbImg);
-        } else {
-          imagesToDelete.push(dbImg);
-        }
-      });
-
-      const dbImageIds = new Set(product.images.map(dbImg => dbImg.publicId));
-      images.forEach(inputImg => {
-        if (!dbImageIds.has(inputImg.imageId)) {
-          imagesToAdd.push(inputImg);
-        }
-      });
       
-      // TODO check above
-    
-      if(imagesToDelete.length > 0){
-        const imagesIds = imagesToDelete.map(p => p.publicId);
-        const imageDeleteResult = await cloudinary.api.delete_resources(imagesIds);
-        // Its ok if no images are found, a product might somehow end up pointing to some images
-        // resources that have already been deleted. And in this case, we still want the req to
-        // return sucess and product doc to be altered
-        // const hasDeletedAtLeastOne =  Object.values(imageDeleteResult.deleted).some(value => value === 'deleted');
-        // if(!hasDeletedAtLeastOne){
-        //   throw new CustomError('Old Products Images could be deleted. Product changed couldnot be saved', {error: imageDeleteResult})
-        // }
-      }
-    
-      // TODO below images comes from req input. It can include images that are both in 
-      // the doc prior to changes AND stay in the doc (have already been marked as Uploaded).
-      // It can also contain malicious input pointing to images that are not in our cloudnary storage
-      // This is ok though because this function also serves the purpose of locating and
-      // returning the files in our cloudinary storage (if any)
-      // And there is no downside to re-marking images that wer marked prior, exccept
-      // that it re-writes ALL their tags
-      // TODO The problem with only inlcuindg here new images, is that we would still
-      // need to verify that the old images come from our storage???
-      // jk I guess we wouldnt need to verify since we have already marked them as sucess...
-      /// HMMMM ok then maybe we CAN change this so it only inlcudes new images
-      // const { responsesSuccessful } = await markAsUploaded(images);
-      const { responsesSuccessful } = await markAsUploaded(imagesToAdd);
-    
-      // Edit rest of document
-      const imagesMarkedAsUploaded = responsesSuccessful.map(({cloudinaryResponse, order, imageId}) => ({
-        url: cloudinaryResponse.secure_url,
-        publicId: cloudinaryResponse.public_id,
-        order
-      }))
-      const newImages = [...imagesMarkedAsUploaded, ...imagesInBothDbAndInput];
-      if (!isEqual(product.images, newImages)) {
+      // if input is not the same as DB doc images. Also keep in mind someone could
+      // just change the img.order, and we would still run this (this is ok)
+      if (!_.isEqual(product.images, images)) {
+        // TODO maybe move below to after the document is saved, because if we delete
+        // image first, then run into an error later, then we can end up with a
+        // document that was not edited, but its images have been deleted from cloudinary
+        
+        // Sort input images
+        const inputImageIds = new Set(images.map(inputImg => inputImg.publicId));
+        product.images.forEach(dbImg => {
+          if (inputImageIds.has(dbImg.publicId)) {
+            imagesInBothDbAndInput.push(dbImg);
+          } else {
+            imagesToDelete.push(dbImg);
+          }
+        });
+
+        const dbImageIds = new Set(product.images.map(dbImg => dbImg.publicId));
+        images.forEach(inputImg => {
+          if (!dbImageIds.has(inputImg.publicId)) {
+            imagesToAdd.push(inputImg);
+          }
+        });
+      
+        // 2. Mark new images as uploaded. Old images have already been marked before.
+        // If imagesToAdd is empty array, then this will also be empty array
+        const { responsesSuccessful } = await markAsUploaded(imagesToAdd);
+      
+        // 3. Update value for DB Doc.images
+        const imagesMarkedAsUploaded = responsesSuccessful.map(({cloudinaryResponse, order, publicId}) => ({
+          url: cloudinaryResponse.secure_url,
+          publicId: cloudinaryResponse.public_id,
+          order
+        }))
+        const newImages = [...imagesMarkedAsUploaded, ...imagesInBothDbAndInput];
+        
+        
         product.images = newImages;
       }
       product.name = name ?? product.name;
@@ -249,16 +214,31 @@ export const editProduct = asyncHandler(async (req, res) => {
       try {
         if (product.isModified()) {
           const newProduct = await product.save({session});
-          return res.json({ product: newProduct });
+
+          // 4. Delete Images that were in DB Doc, but are not in the input
+          let imageDeleteResult;
+          if(imagesToDelete.length > 0){
+            const imagesIds = imagesToDelete.map(p => p.publicId);
+            imageDeleteResult = await cloudinary.api.delete_resources(imagesIds);
+            // Its ok if no images are found, a product might somehow end up pointing to some images
+            // resources that have already been deleted. And in this case, we still want the req to
+            // return sucess and product doc to be altered
+            // const hasDeletedAtLeastOne =  Object.values(imageDeleteResult.deleted).some(value => value === 'deleted');
+            // if(!hasDeletedAtLeastOne){
+            //   throw new CustomError('Old Products Images could be deleted. Product changed couldnot be saved', {error: imageDeleteResult})
+            // }
+          }
+
+          return res.json({ product: newProduct, imageDeleteResult });
         }
         return res.json({ product });
     
       } catch (error) {
         const imagesDeleted = await Promise.allSettled(
-          images.map(({imageId}) =>cloudinary.uploader.destroy(imageId))
+          imagesToAdd.map(({publicId}) =>cloudinary.uploader.destroy(publicId))
         );
         throw new CustomError('Could not store product details into database', {imagesDeleted});
-        // const out = await cloudinary.uploader.destroy(imageId);
+        // const out = await cloudinary.uploader.destroy(publicId);
         // throw new CustomError('Could not store product details into database', {imageDeletedStatus: {...out}});
         // out.result can be "ok" || "not found", maybe more
       }

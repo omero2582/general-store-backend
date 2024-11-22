@@ -45,10 +45,7 @@ router.post('/products',
 )
 
 //
-router.patch('/products',
-  // validateFieldsZod(productSchema.extend({
-  //   imageId: z.string().min(1, "imageId is required").optional(),
-  // })),
+router.patch('/products/:id',
   authMandatory,
   validateFieldsZod(productSchema.partial()), // all fields optional to edit
   editProduct,
