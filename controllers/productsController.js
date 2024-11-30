@@ -7,6 +7,7 @@ import Category from '../models/Category.js';
 import { generatePreSignedUrl, markAsUploaded } from '../services/cloudinary.js';
 
 import _ from 'lodash'
+import ProductRating from '../models/ProductRating.js';
 // IMPORTANT. when using 'cloudinary.api' methods, we are using the admin api,
 // which has rate limit of 500 calls per hour on free tier. 2000 per hour for paid acc
 
@@ -107,6 +108,8 @@ export const deleteProduct = asyncHandler(async (req, res) => {
       }
       // delete document
       await product.deleteOne().session(session);
+      //delete product ratings
+      await ProductRating.deleteMany({ product: id }).session(session)
 
       // delete all images
       const imagesIds = product.images.map(p => p.publicId);
@@ -167,7 +170,8 @@ export const editProduct = asyncHandler(async (req, res) => {
       
       // if input is not the same as DB doc images. Also keep in mind someone could
       // just change the img.order, and we would still run this (this is ok)
-      if (!_.isEqual(product.images, images)) {
+      // TODO Nov 28, just added this ccheck of if(images). Since images is optional, only run this part of the code if images is specified
+      if (images && !_.isEqual(product.images, images)) {
         // TODO maybe move below to after the document is saved, because if we delete
         // image first, then run into an error later, then we can end up with a
         // document that was not edited, but its images have been deleted from cloudinary
@@ -256,3 +260,120 @@ export const editProduct = asyncHandler(async (req, res) => {
   
 })
 
+export const addOrEditProductRating = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { rating, review } = req.validatedData;
+
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const product = await Product.findById(id).populate('createdBy').session(session);
+      if(!product){
+        throw new NotFoundError('Product not found');
+      }
+
+      if(product.createdBy.equals(req.user)){
+        throw new AuthorizationError('You cannot add a rating to a Product you created')
+      }
+    
+     const productRating = await ProductRating.findOne({product: id, user: req.user.id})
+      .session(session);
+
+     if(productRating){
+      // already has rated this product
+      console.log(`EDIT: old rating = ${productRating.rating}, new rating: ${rating}`)
+      const oldRating = productRating.rating;   // this will be modified below, so we are preserving the value here
+      productRating.rating = rating;
+      productRating.review = review || productRating.review;
+      //update product.averageRating
+      if(productRating.isModified()){
+        await productRating.save({session});
+        const newAverage = (product.averageRating * product.numRatings - oldRating + rating) / product.numRatings;
+        console.log(`${product.averageRating} * ${product.numRatings} - ${oldRating} + ${rating} = ${newAverage}`)
+        console.log('edited productRating has different values than previously.')
+        console.log(`Old avg: ${product.averageRating}. New avg: ${newAverage}`)
+        await product.updateOne({ 
+          averageRating: newAverage 
+        }).session(session);
+      }  
+
+      return res.json({ message: "Rating updated successfully." });
+     }else {
+      // new product Rating
+      const newProductRating = new ProductRating({
+        user: req.user,
+        product: id,
+        rating,
+        review,
+      });
+      const out = await newProductRating.save({session});
+
+      // add rating to product.averageRating
+      const newAverage = (product.averageRating * product.numRatings + rating) / (product.numRatings + 1);
+      await product.updateOne({ 
+        averageRating: newAverage, 
+        numRatings: product.numRatings + 1 
+      }).session(session);
+
+      return res.json({newProductRating: out})
+     }
+
+    });
+  } catch (error) {
+    const {message, errors, stack} = error;
+    if(error instanceof CustomError){
+      throw error;
+    }
+    throw new TransactionError(message);
+  } finally {
+    session.endSession();
+  }
+  
+})
+
+// TODO test this below
+export const removeProductRating = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const product = await Product.findById(id).populate('createdBy').session(session);
+      if(!product){
+        throw new NotFoundError('Product not found');
+      }
+    
+     const productRating = await ProductRating.findOne({product: id, user: req.user.id})
+      .session(session);
+
+     if(productRating){
+      // already has rated this product
+      await productRating.deleteOne({session});
+
+      //update product.averageRating
+      const newAverage =
+        product.numRatings > 1
+          ? (product.averageRating * product.numRatings - this.rating) / (product.numRatings - 1)
+          : 0;
+      await product.updateOne({ 
+        averageRating: newAverage, 
+        numRatings: product.numRatings - 1 
+      });
+
+      return res.json({ message: "Rating removed successfully." });
+     }else {
+      throw new NotFoundError('Rating by this user does not exist')
+     }
+
+    });
+  } catch (error) {
+    const {message, errors, stack} = error;
+    if(error instanceof CustomError){
+      throw error;
+    }
+    throw new TransactionError(message);
+  } finally {
+    session.endSession();
+  }
+  
+})

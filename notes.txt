@@ -1,0 +1,27 @@
+## Notes
+- For image management with cloudinary free tier, admin API (delete operations) have a limit of 500 req per hour. Image max files size is 10MB and max megapixels is 25MP.
+
+-In Monngoose models, we can create an index to make names unique regardless of uppel/lower case.
+Example currently in our code:
+// Apply a collation for case insensitivity
+CategorySchema.index({ name: 1 }, { unique: true, collation: { locale: 'en', strength: 2 } });
+
+But the problems with this is:
+When we try to .save() a document and get the DuplicateError, it is not able to return the 
+original text value of that field. For example, there is no way to get the value of .name
+when try to insert a duplicate and get an error.
+When using coalition index, Mongo uses internal coallition keys, written in binary/hex,
+and it uses these as the 'value' to compare between these internal keys. So in the errors,
+it will also return these values instead on the actual field value stored in the database.
+So there is no way to extract the category.name from the error message
+
+Solution:
+Seems like the only solution at the moment is to not rely on this index nor the DuplicateError
+from the index, and instead always run a query to check if there exist ad ocument with duplicate field
+For ex:
+const categoryWithTargetName = await Category.findOne({ name: { $regex: new RegExp(`^${name}$`, 'i') } })
+  if(categoryWithTargetName){
+    throw new CustomError(`Category '${categoryWithTargetName.name}' Already Exists`)
+  }
+
+We currently do above in both category add & category edit

@@ -41,7 +41,13 @@ const ProductSchema = new Schema({
   visibility : { type: String, enum: ['public', 'private'], default: 'public' },
 
   // TODO these 2 will be calculated anytime a rating is added, edited, or removed
-  averageRating: { type: Number, default: 0 },
+  averageRating: { 
+    type: Number, 
+    default: 0,
+    get: function(value) {
+      return Number(value.toFixed(1));
+    }
+  },
   numRatings: { type: Number, default: 0 },
   //
   images: { 

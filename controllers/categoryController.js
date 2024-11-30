@@ -19,7 +19,7 @@ export const addCategory = asyncHandler(async (req, res) => {
   const { name } = req.body;
   const categoryFound = await Category.findOne({ name: { $regex: new RegExp(`^${name}$`, 'i') } })
   if(categoryFound){
-    throw new CustomError(`Category '${name}' Already Exists`)
+    throw new CustomError(`Category '${categoryFound.name}' Already Exists`)
   }
 
   const newCategory = new Category({name, createdBy: req.user})
@@ -78,7 +78,12 @@ export const editCategory = asyncHandler(async (req, res) => {
   if(!req.user.isUserLevelMoreThanOrEqualTo('admin')){
     throw new AuthorizationError('User Level of Admin required to access this resource')
   }
-  // const category = await Category.findOne({ name: { $regex: new RegExp(`^${name}$`, 'i') } })
+  
+  const categoryWithTargetName = await Category.findOne({ name: { $regex: new RegExp(`^${name}$`, 'i') } })
+  if(categoryWithTargetName){
+    throw new CustomError(`Category '${categoryWithTargetName.name}' Already Exists`)
+  }
+
   const category = await Category.findById(id).populate('createdBy');
   if(!category){
     throw new NotFoundError(`Category Not Found`)

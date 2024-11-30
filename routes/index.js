@@ -3,8 +3,8 @@ import asyncHandler from 'express-async-handler';
 import '../config/cloudinary.js'
 import { z } from "zod";
 import { validateFieldsZod } from '../middleware/validationMiddleware.js';
-import {  addProduct, deleteProduct, editProduct, getPresignedUrl, getProductById, getProducts, getProductsPublic } from '../controllers/productsController.js';
-import { productSchema } from '../../shared/dist/schemas.js';
+import {  addOrEditProductRating, addProduct, deleteProduct, editProduct, getPresignedUrl, getProductById, getProducts, getProductsPublic } from '../controllers/productsController.js';
+import { productRatingSchema, productSchema } from '../../shared/dist/schemas.js';
 import { changeUserLevelSchema } from '../../shared/dist/schemas.js';
 import { changeUserLevel } from '../controllers/userController.js';
 import { authMandatory } from '../middleware/authMiddleware.js';
@@ -60,6 +60,20 @@ router.post('/users/level',
   validateFieldsZod(changeUserLevelSchema),
   changeUserLevel
 )
+
+// ratings
+router.post('/products/:id/my-rating',
+  authMandatory,
+  validateFieldsZod(productRatingSchema),
+  addOrEditProductRating,
+)
+
+router.delete('/products/:id/my-rating',
+  authMandatory,
+  addOrEditProductRating,
+)
+
+//
 
 // TODO add validation to below
 // its just quanity and productId

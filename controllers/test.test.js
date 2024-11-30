@@ -126,5 +126,8 @@ const addCarts = async () => {
 // console.log(productsCategoryIncluded.categories);
 
 
-const out = await deleteImagesArr();
+// const out = await deleteImagesArr();
+// console.log(out);
+
+const out = Buffer.from("4f314d4f0108", 'hex').toString('utf8')
 console.log(out);
