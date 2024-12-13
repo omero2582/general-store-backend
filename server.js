@@ -58,8 +58,6 @@ app.get('/api/',
 // other routers, then
 app.use('/api', indexRouter);
 
-app.use('/api/auth', authRouter);
-
 // Serve the React app for all other routes
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '/../frontend/dist/index.html'));

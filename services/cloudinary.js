@@ -1,3 +1,4 @@
+import '../config/cloudinary.js'
 import {v2 as cloudinary} from 'cloudinary'
 import { CustomError } from '../errors/errors.js';
 

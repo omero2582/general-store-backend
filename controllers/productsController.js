@@ -177,10 +177,15 @@ export const editProduct = asyncHandler(async (req, res) => {
         // document that was not edited, but its images have been deleted from cloudinary
         
         // Sort input images
-        const inputImageIds = new Set(images.map(inputImg => inputImg.publicId));
+        // const inputImageIds = new Set(images.map(inputImg => inputImg.publicId));
+        const inputImageMap = new Map(images.map(inputImg => [inputImg.publicId, inputImg])); // Create a map for quick lookup of input images by publicId
         product.images.forEach(dbImg => {
-          if (inputImageIds.has(dbImg.publicId)) {
-            imagesInBothDbAndInput.push(dbImg);
+          if (inputImageMap.has(dbImg.publicId)) {
+            const inputImg = inputImageMap.get(dbImg.publicId);
+            imagesInBothDbAndInput.push({
+              ...dbImg,
+              order: inputImg.order,
+            }); // corrected?, we do want to push an object containing the dbImg.url, however we also want in to use the inputImg.order
           } else {
             imagesToDelete.push(dbImg);
           }
@@ -203,8 +208,9 @@ export const editProduct = asyncHandler(async (req, res) => {
           publicId: cloudinaryResponse.public_id,
           order
         }))
-        const newImages = [...imagesMarkedAsUploaded, ...imagesInBothDbAndInput];
-        
+        const newImages = [...imagesMarkedAsUploaded, ...imagesInBothDbAndInput]
+          .sort((a, b) => a?.order - b?.order); // stores array in right order just in case,
+          // althought in the frotnend we should never rely on this and always sort order manually
         
         product.images = newImages;
       }
