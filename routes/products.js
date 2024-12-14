@@ -1,6 +1,6 @@
 import express from 'express';
 import { validateFieldsZod } from '../middleware/validationMiddleware.js';
-import {  addOrEditProductRating, addProduct, deleteProduct, editProduct, getPresignedUrl, getProductById, getProducts, getProductsPublic } from '../controllers/productsController.js';
+import {  addOrEditProductRating, addProduct, deleteProduct, editProduct, extractProductsSortAndFilter, getPresignedUrl, getProductById, getProducts, getProductsPublic } from '../controllers/productsController.js';
 import { productRatingSchema, productSchema } from '../../shared/dist/schemas.js';
 import { authMandatory } from '../middleware/authMiddleware.js';
 
@@ -9,11 +9,13 @@ const router = express.Router();
 
 
 router.get('/',
+  extractProductsSortAndFilter,
   getProductsPublic
 )
 
 router.get('/admin',
   authMandatory,
+  extractProductsSortAndFilter,
   getProducts
 )
 

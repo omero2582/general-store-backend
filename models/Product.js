@@ -41,7 +41,7 @@ const ProductSchema = new Schema({
   visibility : { type: String, enum: ['public', 'private'], default: 'public' },
 
   // TODO these 2 will be calculated anytime a rating is added, edited, or removed
-  averageRating: { 
+  rating: { 
     type: Number, 
     default: 0,
     get: function(value) {
@@ -76,6 +76,6 @@ const ProductSchema = new Schema({
   toObject: reshapingOptions
 });
 
-ProductSchema.index({ averageRating: -1 });
+ProductSchema.index({ rating: -1 });
 const Product = mongoose.model('Product', ProductSchema);
 export default Product;

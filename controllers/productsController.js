@@ -11,8 +11,34 @@ import ProductRating from '../models/ProductRating.js';
 // IMPORTANT. when using 'cloudinary.api' methods, we are using the admin api,
 // which has rate limit of 500 calls per hour on free tier. 2000 per hour for paid acc
 
+export const extractProductsSortAndFilter = (req, res, next) => {
+  const { categories, sort, minPrice, maxPrice } = req.query;
+
+  let filter = {};
+  if (categories) {
+    filter.categories = { $in: categories.split(',') }; // Split comma-separated categories
+  }
+  if (minPrice || maxPrice) {
+      filter.price = {};
+      if (minPrice) filter.price.$gte = parseFloat(minPrice);
+      if (maxPrice) filter.price.$lte = parseFloat(maxPrice);
+  }
+
+  let sortOption = {};
+
+  // Define a whitelist of fields where sorting is allowed
+  const allowedSortFields = ['price', 'rating', 'name'];
+  if (sort) {
+      const [field, order] = sort.split('-');
+      if (allowedSortFields.includes(field)) {
+        sortOption[field] = order === 'asc' ? 1 : -1;
+      }
+  }
+  req.sortAndFilter = {sortOption, filter}
+  next()
+}
+
 export const getProductById = asyncHandler(async (req, res) => {
-  console.log('---------LOGGGG')
   const { id } = req.params;
   const product = await Product.findOne({_id: id, visibility: 'public'}).populate('createdBy');
   if(!product){
@@ -22,15 +48,23 @@ export const getProductById = asyncHandler(async (req, res) => {
 })
 
 export const getProductsPublic = asyncHandler(async (req, res) => {
-  let products = await Product.find({visibility: 'public'}).populate('categories');
+  const {sortOption, filter} = req.sortAndFilter;
+  
+  const products = await Product.find({...filter, visibility: 'public'})
+    .populate('categories')
+    .sort(sortOption);
   return res.json({products});
 })
 
 export const getProducts = asyncHandler(async (req, res) => {
+  const {sortOption, filter} = req.sortAndFilter;
+
   if(!req.user.isUserLevelMoreThanOrEqualTo('admin')){
     throw new AuthorizationError('User Level of Admin required to access this resource')
   }
-  let products = await Product.find().populate(['createdBy', 'categories']);
+  const products = await Product.find(filter)
+    .populate(['createdBy', 'categories'])
+    .sort(sortOption);
   return res.json({products});
 })
 
@@ -291,15 +325,15 @@ export const addOrEditProductRating = asyncHandler(async (req, res) => {
       const oldRating = productRating.rating;   // this will be modified below, so we are preserving the value here
       productRating.rating = rating;
       productRating.review = review || productRating.review;
-      //update product.averageRating
+      //update product.rating
       if(productRating.isModified()){
         await productRating.save({session});
-        const newAverage = (product.averageRating * product.numRatings - oldRating + rating) / product.numRatings;
-        console.log(`${product.averageRating} * ${product.numRatings} - ${oldRating} + ${rating} = ${newAverage}`)
+        const newAverage = (product.rating * product.numRatings - oldRating + rating) / product.numRatings;
+        console.log(`${product.rating} * ${product.numRatings} - ${oldRating} + ${rating} = ${newAverage}`)
         console.log('edited productRating has different values than previously.')
-        console.log(`Old avg: ${product.averageRating}. New avg: ${newAverage}`)
+        console.log(`Old avg: ${product.rating}. New avg: ${newAverage}`)
         await product.updateOne({ 
-          averageRating: newAverage 
+          rating: newAverage 
         }).session(session);
       }  
 
@@ -314,10 +348,10 @@ export const addOrEditProductRating = asyncHandler(async (req, res) => {
       });
       const out = await newProductRating.save({session});
 
-      // add rating to product.averageRating
-      const newAverage = (product.averageRating * product.numRatings + rating) / (product.numRatings + 1);
+      // add rating to product.rating
+      const newAverage = (product.rating * product.numRatings + rating) / (product.numRatings + 1);
       await product.updateOne({ 
-        averageRating: newAverage, 
+        rating: newAverage, 
         numRatings: product.numRatings + 1 
       }).session(session);
 
@@ -356,13 +390,13 @@ export const removeProductRating = asyncHandler(async (req, res) => {
       // already has rated this product
       await productRating.deleteOne({session});
 
-      //update product.averageRating
+      //update product.rating
       const newAverage =
         product.numRatings > 1
-          ? (product.averageRating * product.numRatings - this.rating) / (product.numRatings - 1)
+          ? (product.rating * product.numRatings - this.rating) / (product.numRatings - 1)
           : 0;
       await product.updateOne({ 
-        averageRating: newAverage, 
+        rating: newAverage, 
         numRatings: product.numRatings - 1 
       });
 
