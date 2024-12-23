@@ -11,22 +11,30 @@ import ProductRating from '../models/ProductRating.js';
 // IMPORTANT. when using 'cloudinary.api' methods, we are using the admin api,
 // which has rate limit of 500 calls per hour on free tier. 2000 per hour for paid acc
 
-export const extractProductsSortAndFilter = (req, res, next) => {
+export const extractProductsSortAndFilter =  asyncHandler(async (req, res, next) => {
   const { categories, sort, minPrice, maxPrice } = req.query;
 
   let filter = {};
+
+  // Category filtering
   if (categories) {
-    filter.categories = { $in: categories.split(',') }; // Split comma-separated categories
+    const categoryNames = categories.split(',').map(name => name.trim());
+    const categoryRegexes = categoryNames.map(name => new RegExp(`^${name}$`, 'i'));
+    
+    const matchedCategories = await Category.find({ name: { $in: categoryRegexes } }).select('_id');
+    const categoryIds = matchedCategories.map(cat => cat._id);
+    filter.categories = { $in: categoryIds }; // Split comma-separated categories
   }
+
+  // Price filtering
   if (minPrice || maxPrice) {
       filter.price = {};
       if (minPrice) filter.price.$gte = parseFloat(minPrice);
       if (maxPrice) filter.price.$lte = parseFloat(maxPrice);
   }
 
+  // Sorting
   let sortOption = {};
-
-  // Define a whitelist of fields where sorting is allowed
   const allowedSortFields = ['price', 'rating', 'name'];
   if (sort) {
       const [field, order] = sort.split('-');
@@ -36,11 +44,11 @@ export const extractProductsSortAndFilter = (req, res, next) => {
   }
   req.sortAndFilter = {sortOption, filter}
   next()
-}
+})
 
 export const getProductById = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const product = await Product.findOne({_id: id, visibility: 'public'}).populate('createdBy');
+  const product = await Product.findOne({_id: id, visibility: 'public'}).populate(['createdBy', 'categories']);
   if(!product){
     throw new NotFoundError('Product not found');
   }
