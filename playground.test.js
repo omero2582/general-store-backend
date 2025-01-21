@@ -31,5 +31,6 @@ const middleware = (schema) => (req, res, next) => {
   return {success: true}
 }
 
-const out = middleware(productSchema.omit({imageId: true}))(req);
-console.log(out);
+// const out = middleware(productSchema.omit({imageId: true}))(req);
+// console.log(out);
+

@@ -19,6 +19,7 @@ const ProductSchema = new Schema({
   createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   name: { type: String, required: true },
   description: { type: String },
+  minUserLevelForActions: { type: String, enum: ['owner', 'admin', 'user'], default: 'admin' },
   price: {  // stored in cents
     type: Number,
     validate: {

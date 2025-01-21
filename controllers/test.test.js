@@ -129,5 +129,48 @@ const addCarts = async () => {
 // const out = await deleteImagesArr();
 // console.log(out);
 
-const out = Buffer.from("4f314d4f0108", 'hex').toString('utf8')
-console.log(out);
+// const out = Buffer.from("4f314d4f0108", 'hex').toString('utf8')
+// console.log(out);
+
+
+const updateProductsToNewUserReqRoleField = async () => {
+  // const products = await Product.find().populate("createdBy");
+  // products.forEach(p => {
+  //   p.minUserLevelForActions = p.createdBy.userLevel
+  // } )
+  // Update all products with the new field based on 'createdBy.userLevel'
+Product.aggregate([
+  {
+    $lookup: {
+      from: 'users', // The name of the 'users' collection
+      localField: 'createdBy', // Field in the 'Product' document to match 'User'
+      foreignField: '_id', // The field in 'User' to match the 'createdBy' field
+      as: 'createdByDetails' // Alias for the populated data
+    }
+  },
+  {
+    $unwind: '$createdByDetails' // Unwind to flatten the array resulting from $lookup
+  },
+  {
+    $set: {
+      minUserLevelForActions: '$createdByDetails.userLevel' // Set the new field based on 'userLevel' from 'createdBy'
+    }
+  },
+  {
+    $project: {
+      createdByDetails: 0 // Exclude the 'createdByDetails' field from the final document
+    }
+  },
+  {
+    $merge: { into: 'products' } // Merge back the updated products into the collection
+  }
+])
+.then(() => {
+  console.log('Products updated successfully');
+})
+.catch((err) => {
+  console.error('Error updating products:', err);
+});
+}
+
+updateProductsToNewUserReqRoleField();

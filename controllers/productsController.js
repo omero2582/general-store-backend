@@ -98,6 +98,7 @@ export const addProduct = asyncHandler(async (req, res) => {
   try {
     const product = new Product({
       createdBy: req.user,
+      minUserLevelForActions: req.user.userLevel,
       name,
       description,
       price,
@@ -144,9 +145,9 @@ export const deleteProduct = asyncHandler(async (req, res) => {
       }
 
       const userLevel = req.user.userLevel
-      const creatorLevel = product.createdBy.userLevel;
-      if(!req.user.isUserLevelMoreThanOrEqualTo(creatorLevel)){
-        throw new AuthorizationError(`You do not have a higher user level than the product creator. ${userLevel} tried to delete product by ${creatorLevel}`);
+      const requiredLevel = product.minUserLevelForActions;
+      if(!req.user.isUserLevelMoreThanOrEqualTo(requiredLevel)){
+        throw new AuthorizationError(`You do not have meet the user level requirement to delete this product. ${userLevel} tried to delete product requiring ${requiredLevel}`);
       }
       // delete document
       await product.deleteOne().session(session);
@@ -201,9 +202,9 @@ export const editProduct = asyncHandler(async (req, res) => {
       }
     
       const userLevel = req.user.userLevel
-      const creatorLevel = product.createdBy.userLevel;
-      if(!req.user.isUserLevelMoreThanOrEqualTo(creatorLevel)){
-        throw new AuthorizationError(`You do not have a higher user level than the product creator. ${userLevel} tried to delete product by ${creatorLevel}`);
+      const requiredLevel = product.minUserLevelForActions;
+      if(!req.user.isUserLevelMoreThanOrEqualTo(requiredLevel)){
+        throw new AuthorizationError(`You do not have meet the user level requirement to edit this product. ${userLevel} tried to edit product requiring ${requiredLevel}`);
       }
       
       const imagesToDelete = [] //images previously in DB but not in input
