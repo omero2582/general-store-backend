@@ -73,7 +73,7 @@ export const generatePreSignedUrl = async () => {
     const options = {
       timestamp: Math.round(new Date().getTime() / 1000),
       asset_folder: 'products',
-      allowed_formats: ['jpg', 'png', 'webp', 'jfif'],
+      allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'jfif'],
       use_filename: true,
       context: 'linked=false|test=true'
       // to add more context, separate them with pipe, for ex: 'linked=false|abc=true'
