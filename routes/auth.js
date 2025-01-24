@@ -6,7 +6,7 @@ const router = express.Router();
 router.get('/google',
   (req, res, next) => { console.log('AUTHENTICATE'); return next()},
   // Step 1 - This redirects the user to the google sign-in page, by creating a large URL
-  passport.authenticate('google', {scope: ['profile', 'email']})
+  passport.authenticate('google', {scope: ['profile', 'email'], prompt: 'select_account'})
 )
 
 router.get('/google/redirect',
