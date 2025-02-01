@@ -3,6 +3,8 @@ import asyncHandler from 'express-async-handler';
 import passport from 'passport';
 const router = express.Router();
 
+// TODO add asyncHandler
+
 router.get('/google',
   (req, res, next) => { console.log('AUTHENTICATE'); return next()},
   // Step 1 - This redirects the user to the google sign-in page, by creating a large URL
@@ -30,8 +32,14 @@ router.get('/google/redirect',
 )
 
 router.post('/logout', (req, res, next) => {
+  const sessionID = req.sessionID // NECESSARY to capture req.sessionID BEFORE req.logout,
+  // As soon as you call req.logout, passport changes the req.sessionID for security (to prevent some attack)
   req.logout(function(err) {
     if (err) { return next(err); }
+    const io = req.io;
+    // TODO add an emit here to notify all sockets in this room of the logout
+    io.in(sessionID).emit('user', null) // req.user is null here
+    io.socketsLeave(sessionID);
     res.json({message: 'logged out !'})
   });
 })
