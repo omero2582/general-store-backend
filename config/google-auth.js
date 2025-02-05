@@ -14,7 +14,8 @@ passport.use(
 	new Strategy(opts, async (accessToken, refreshToken, profile, done) => {
     // Step 3 - Google Sign-In Success, now use the google user information
     // to findOrCreate a new user for our DB
-    console.log('PROFIELEEE', profile)
+    // console.log('PROFIELEEE', profile)
+    console.log('PROFILE')
     let user;
     const session = await mongoose.startSession();
     try {

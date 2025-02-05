@@ -1,14 +1,10 @@
 import mongoose from "mongoose";
 
-// TODO
-// in the future, find out what is the best way to prevent some fields to be
-// returned unless specified. We can maybe use the same 'reshapingOptions'
-// apprach we used in 'Product' model, but I am 99% sure there was another way maybe (?)
-// that was also here in the model, then when you called the model you could chain something if you 
-// wanted to include it
 const Schema = mongoose.Schema;
 
 const UserSchema = new Schema({
+  // adding field.select: false, prevents the field from being included when retrieveing the doc, unless sepcified
+  // ip: { type: String, required: false, select: false },
   email: { type: String, unique: true, required: true, maxLength: 40 },
   username: { type: String, unique: true, required: true, maxLength: 40 },
   displayName: { type: String, required: true, maxLength: 40 },

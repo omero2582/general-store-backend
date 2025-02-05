@@ -4,6 +4,9 @@ import { Server } from "socket.io";
 import express from 'express';
 import { AuthorizationError } from "./errors/errors.js";
 import { instrument } from "@socket.io/admin-ui";
+import cookieParser from "cookie-parser";
+import cookie from 'cookie'
+
 
 // export let io;
 export const setupSocketIO = (server, sessionMiddleware) => {
@@ -13,6 +16,12 @@ export const setupSocketIO = (server, sessionMiddleware) => {
 // https://socket.io/docs/v3/client-initialization/#low-level-engine-options
 // https://www.youtube.com/watch?v=ZKEqqIO7n-k
 const io = new Server(server, {
+  // cookie: {
+  //   name: 'io',
+  //   httpOnly: true,
+  //   sameSite: 'strict',
+  //   maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
+  // }
   // cors: {
   //   origin: "http://localhost:5173", // Vite dev server address
   //   methods: ["GET", "POST"],
@@ -41,6 +50,7 @@ const onlyForHandshake = (middleware) => {
 // https://socket.io/docs/v4/emit-cheatsheet/
 
 io.engine.use(express.json());
+// io.engine.use(cookieParser());
 io.engine.use(onlyForHandshake(sessionMiddleware));
 io.engine.use(onlyForHandshake(passport.session()));
 // TODO change fn below so it stops polling if no user found....
@@ -57,21 +67,26 @@ io.engine.use(onlyForHandshake(passport.session()));
 //     }
 //   }),
 // );
-io.use((socket, next) => {
-  console.log('SID', socket.request.sessionID)
-  console.log('QUERY', socket.handshake.query)
-  console.log('auth', socket.request.user)
-    if (socket.request.user) {
-      next();
-    } else {
-      const message = "Not Signed In, Stop WebSocket connection";
-      const err = new AuthorizationError(message);
-      next(err);
-      // res.writeHead(403, { 'Content-Type': 'application/json' });
-      // res.end(JSON.stringify({ error: message, message }));
-      // return res.status(404).json(err) <--- doesnt work, socekt.io res is NOT express res
-    }
-}),
+
+// // only setablish websocket if they are user
+// io.use((socket, next) => {
+//   console.log('SID', socket.request.sessionID)
+//   console.log('QUERY', socket.handshake.query)
+//   console.log('auth', socket.request.user)
+//     if (socket.request.user) {
+//       next();
+//     } else {
+//       const message = "Not Signed In, Stop WebSocket connection";
+//       const err = new AuthorizationError(message);
+//       next(err);
+//       // res.writeHead(403, { 'Content-Type': 'application/json' });
+//       // res.end(JSON.stringify({ error: message, message }));
+//       // return res.status(404).json(err) <--- doesnt work, socekt.io res is NOT express res
+//     }
+// }),
+
+
+
 
 // Handle WebSocket handshake errors
 io.engine.on("connection_error", (err) => {
@@ -82,9 +97,16 @@ io.engine.on("connection_error", (err) => {
 io.on('connection', (socket) => {
   console.log('Socket connected', socket.id);
 
+  const cookies = cookie.parse(socket.request.headers.cookie || '');
+  const clientId = cookies.clientId;
+  console.log(cookies)
+
+
   const user = socket.request.user; // user id is our DB user id
   const passportSessionId = socket.request.sessionID; //  cookie in the browser shared among tabs
   const websocketId = socket.id // id for each websocket connection (new socket every tab)
+  // request.sessionID === request.session.id
+  
   // Consider the situation:
   // I open 1 chrome browser with 2 tabs connecting to this server, and 1 firefox browser connecting also
   // This means I have: 3 websocket ids, 2 passport sessions (chrome tabs share the cookie), and 1 user
@@ -92,13 +114,13 @@ io.on('connection', (socket) => {
   // In this case, we want users in the same session to join the room,
   // this way logging out from ur browser does NOT log you out form your phone
 
+  console.log(`socket.id: ${websocketId} | request.sessionID: ${passportSessionId} | user.id: ${user?.id} | clientId: ${clientId}`);
+  // socket.join(passportSessionId)
+  // socket.emit("join-room", passportSessionId) 
+  socket.join(clientId)
+  socket.emit("join-room", clientId) 
   if (user) {
-    console.log(`socket.id: ${websocketId} | request.sessionID: ${passportSessionId} | user.id: ${user.id}`);
-    // console.log('SESSSSIOn', socket.request.session)
-    // socket.join([passportSessionId, user.id]); // performance-wise, it is the same
-    socket.join(passportSessionId)
     socket.join(user.id)
-    socket.emit("join-room", passportSessionId) 
     socket.emit("join-room", user.id) 
     // TODO somehow detect passport session expiry and emit an event to all users ???
     // JK, it is best to not worry about this... bad for performance.
