@@ -1,5 +1,3 @@
-
-import asyncHandler from 'express-async-handler';
 import { AuthenticationError } from '../errors/errors.js';
 
 export const authMandatory = (req, res, next) => {
@@ -15,12 +13,15 @@ export const overwriteReqJsonIncludeUser = (req, res, next) => {
 
   res.json = function (body) {    // Override the res.json method
     if (req.isAuthenticated()) {
-      // add cookie info
-      // console.log(req.session.cookie);
+      // Adds session fields to response
+      // Since the session cookie needs to be http only to prevent hijacking sessions
       const {expires, maxAge, originalMaxAge} = req.session?.cookie;
-      //
 
-      body.user = {...req.user.toObject(), cookie: {expires, maxAge, originalMaxAge}};       // Attach req.user to the response body
+      // Attaches req.user to the response body
+      body.user = {
+        ...req.user.toObject(), 
+        session: {expires, maxAge, originalMaxAge}
+      };       
       body.auth = true;
     }
     originalJson.call(this, body); // Call the original res.json with the modified body

@@ -15,7 +15,6 @@ import indexRouter from './routes/index.js'
 import { errorHandler } from './middleware/errorMiddleware.js';
 import { overwriteReqJsonIncludeUser } from './middleware/authMiddleware.js';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
 
 import http from 'http';
@@ -32,13 +31,13 @@ const server = http.createServer(app);
 
 
 
-// import { fileURLToPath } from 'url';
+import { fileURLToPath } from 'url';
 
-// const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// app.use(express.static(path.join(__dirname, '../frontend/dist')));
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+app.use(express.static(path.join(__dirname, '../frontend/dist')));
 
 
-app.use(express.static(path.resolve('../frontend/dist')));
+// app.use(express.static(path.resolve('../frontend/dist')));
 
 // TODO deplying test above (shouldnt) & then update dockerfile to add an extra
 // WORKDIR /app/backend before
@@ -99,8 +98,8 @@ app.use('/api', indexRouter);
 
 // Serve the React app for all other routes
 app.get('*', (req, res) => {
-  // res.sendFile(path.join(__dirname, '/../frontend/dist/index.html'));
-  res.sendFile(path.resolve('/../frontend/dist/index.html'));
+  res.sendFile(path.join(__dirname, '/../frontend/dist/index.html'));
+  // res.sendFile(path.resolve('/../frontend/dist/index.html'));
 });
 
 

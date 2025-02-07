@@ -4,12 +4,12 @@ import User from "../models/User.js";
 import Cart from "../models/Cart.js";
 import mongoose from "mongoose";
 
-
 const opts = {
   clientID: process.env.GOOGLE_OAUTH_CLIENT_ID,
   clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
   callbackURL: process.env.NODE_ENV === 'development' ? 'http://localhost:3000/api/auth/google/redirect' : '/api/auth/google/redirect',
 };
+
 passport.use(
 	new Strategy(opts, async (accessToken, refreshToken, profile, done) => {
     // Step 3 - Google Sign-In Success, now use the google user information
@@ -79,7 +79,7 @@ passport.serializeUser((user, done) => {
 });
 
 passport.deserializeUser(async (id, done) => {
-  console.log('DEESERLIAZIE');
+  console.log('DESERIALIZE');
 	try {
 		const user = await User.findById(id);
     if (user) {

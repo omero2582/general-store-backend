@@ -7,12 +7,18 @@ const router = express.Router();
 
 // TODO add asyncHandler? nvm not sure if passport code is async / has diff async version
 
+// NOTE - auth flow contains multiple redirects. req AND all cookies besides sid 
+// are cleared after step 1, req.session is cleared after step 2.
+// To make data accessible in the later steps in auth flow:
+// 1. save req data into req.session in step 1
+// 2. save req.session data into req in step 2
+// 3. retrieve data from req
 router.get('/google',
   // Step 1 - This redirects the user to the google sign-in page, by creating a large URL
   function (req, res, next) { 
     console.log('AUTHENTICATE', req.cookies.clientId, 'session: ',  req.sessionID);
     req.session.clientId = req.cookies.clientId
-    // ^^^ we must asssign to session like this, otherwise req doesnt persist to step 2
+    // ^^^ we must asssign cookie to session like this, otherwise req fields dont persist to step 2
     passport.authenticate('google', {
       scope: ['profile', 'email'],
       prompt: 'select_account',
@@ -23,8 +29,9 @@ router.get('/google',
 
 router.get('/google/redirect',
   // Step 2 - This actually authenticates the user and runs the code in the passport strategy 
-  // express session clears all your cookies besides sid AND your req fields,
-  // when you reach this code after step 1
+  // express session clears all your req fields AND all your cookies besides sid
+  // when you reach this code after step 1. This is simply bc the req here 
+  // does NOT come from our original client req, but instead from google redirect
   function (req, res, next) {
     console.log('REDIRECT', req.cookies, 'clientId: ', req.session.clientId);
     req.clientId = req.session.clientId;
@@ -43,37 +50,33 @@ router.get('/google/redirect',
       httpOnly: true, 
       sameSite: 'strict', 
     });
+    
     io.in(req.clientId).emit('user', req.user)
-    // io.in(req.clientId).socketsJoin(req.sessionID)
     io.in(req.clientId).socketsJoin(req.user.id)
-    // io.socketsLeave(req.clientId)
     
     res.redirect(process.env.NODE_ENV === 'development' ? 'http://localhost:5173/' : '/');
   }
 )
 
 router.post('/logout', (req, res, next) => {
-  // const oldSessionID = req.sessionID
   console.log('log out', req.cookies)
-  const oldSessionID = req.cookies.clientId
+  const oldSessionID = req.cookies.clientId // this was orginaly sessionID, now clientId
   const oldUser = req.user;
   // As soon as you call req.logout, passport changes the req.sessionID for security (to prevent some attack)
   req.logout(function(err) {
     if (err) { return next(err); }
-    // Log out all other passport session sockets (same browser different tabs)
+    // Log out all other sockets in same client (same browser different tabs)
     const io = req.io;
     io.in(oldSessionID).emit('user', null)
-    // io.in(oldSessionID).socketsJoin(req.sessionID);  // join new sessionID room
     io.in(oldSessionID).socketsLeave(oldUser.id); // leave the user room
-    // io.socketsLeave(oldSessionID); // leave previous sessionID room
     res.json({message: 'logged out !'})
   });
 })
 
 router.get('/me', 
-  overwriteReqJsonIncludeUser,
+  overwriteReqJsonIncludeUser,  // includes user
   (req, res, next) => {
-  res.json({test: 'hi'})  // already includes user due to our middleware
+  res.json({test: 'hi'})
 })
 
 export default router;
