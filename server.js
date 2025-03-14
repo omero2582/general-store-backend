@@ -25,26 +25,8 @@ import cookieParser from 'cookie-parser';
 const app = express();
 const server = http.createServer(app);
 
-
-// // static files
-// // need __dirname manually, since it is only available in CommonJS, and we changed to ES6 modules
-
-
-
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-app.use(express.static(path.join(__dirname, '../frontend/dist')));
-
-
-// app.use(express.static(path.resolve('../frontend/dist')));
-
-// TODO deplying test above (shouldnt) & then update dockerfile to add an extra
-// WORKDIR /app/backend before
-// CMD ["npm", "start"]
-
-
-
+// Requires Dockerfile to do 'WORKDIR /app/backend' before CMD ["npm", "start"]
+app.use(express.static(path.resolve('../frontend/dist')));
 
 
 // app.use(cors())
@@ -66,10 +48,10 @@ const sessionMiddleware = session({
 });
 app.use(sessionMiddleware);  //research saveUninitailized and resave, think i need to set them to false if setting expiry maxAge
 app.use(passport.session());
-//
-// set cookie if no user
+
+// set cookie 'clientId' if it doesnt exist
 app.use((req, res, next) => {
-  if (!req.session.user && !req.cookies?.clientId) {
+  if (!req.cookies?.clientId) {
     const clientId = crypto.randomUUID();
     res.cookie('clientId', clientId, { 
       maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
@@ -79,6 +61,10 @@ app.use((req, res, next) => {
   }
   next();
 })
+
+// Middleware to override res.json() to always include req.user in every response
+// Not using this anymore. We are instead now using websockets to udpate user info
+// app.use(overwriteReqJsonIncludeUser);
 
 // Websockets
 const io = setupSocketIO(server, sessionMiddleware);
@@ -90,16 +76,11 @@ app.use((req, res, next) => {
 // consider that here io is getting added to EVERY request, feels unneessary
 
 
-
-// Middleware to override res.json() to always include req.user
-// app.use(overwriteReqJsonIncludeUser);
-
 app.use('/api', indexRouter);
 
-// Serve the React app for all other routes
+// Serve Front End for all other routes
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '/../frontend/dist/index.html'));
-  // res.sendFile(path.resolve('/../frontend/dist/index.html'));
+  res.sendFile(path.resolve('../frontend/dist/index.html'));
 });
 
 
