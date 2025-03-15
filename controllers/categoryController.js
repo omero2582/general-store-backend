@@ -7,7 +7,15 @@ import Product from "../models/Product.js";
 // Categories
 // TODO just added userLevel checks on edit and delete to make sure owner categories
 // cannot be dleeted by admin. test.
+export const getCategoriesPublic = asyncHandler(async (req, res) => {
+  const categories = await Category.find().populate('createdBy');
+  return res.json({categories})
+});
+
 export const getCategories = asyncHandler(async (req, res) => {
+  if(!req.user.isUserLevelMoreThanOrEqualTo('admin')){
+    throw new AuthorizationError('User Level of Admin required to access this resource')
+  }
   const categories = await Category.find().populate('createdBy');
   return res.json({categories})
 });
