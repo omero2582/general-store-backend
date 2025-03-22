@@ -3,6 +3,7 @@ import { Strategy } from "passport-google-oauth20";
 import User from "../models/User.js";
 import Cart from "../models/Cart.js";
 import mongoose from "mongoose";
+import { nanoid } from 'nanoid'
 
 const opts = {
   clientID: process.env.GOOGLE_OAUTH_CLIENT_ID,
@@ -32,7 +33,7 @@ passport.use(
         if (!user) {
           const newUser = new User({
             email,
-            username: email,
+            username: `${firstName.slice(0, 13)}-${nanoid(7)}`,
             displayName: firstName,
             nameFull: {
               firstName,
